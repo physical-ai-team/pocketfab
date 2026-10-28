@@ -60,19 +60,19 @@ def detect_boxes(jpeg: bytes, proc_size: dict) -> list[dict]:
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # 3. 모폴로지 연산으로 작은 잡음 제거 및 구멍 메우기
+    # 3. 모폴로지: 닫힘으로 초코칩 구멍을 먼저 메우고, 열림으로 작은 잡음 제거
     kernel = np.ones((5, 5), np.uint8)
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
-    sure_bg = cv2.dilate(opening, kernel, iterations=3)
+    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
+    opening = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel, iterations=2)
 
     # 4. 윤곽선(Contours) 찾기
-    contours, _ = cv2.findContours(sure_bg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # 면적 기준 내림차순 정렬 후 최대 30개까지만 선택
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:30]
 
     boxes = []
-    min_area = (w * h) * 0.003  # 전체 화면의 0.3% 미만 크기의 잡음은 제외
+    min_area = (w * h) * 0.003  # 화면의 0.3% 미만은 잡음으로 보고 버림
     box_id = 0
 
     for cnt in contours:
