@@ -14,7 +14,7 @@
 |---|---|---|---|
 | C1 Gateway | `c1-gateway/` | QR 접속, 카메라 스트리밍 페이지, 대시보드, 백프레셔(`MAX_IN_FLIGHT`) | 이기태 |
 | C2 Preprocessing | `c2-preprocessing/` | 리사이즈(종횡비 유지), 노이즈 제거, 밝기 보정, **OpenCV 과자 박스 검출** | 조아람 |
-| C3 Inference | `c3-inference/` | 박스 프롬프트 → SAM 2 마스크 → 원형도 `4πA/P²` + solidity `A/A_hull` → 정상/불량 판정 | 박민성 |
+| C3 Inference | `c3-inference/` | 박스 프롬프트 → SAM 2 마스크 → 원형도 `4πA/P²` + solidity `A/A_hull` + 원 채움률 + 오목 깊이 → 정상/불량 판정·불량 유형 | 박민성 |
 | C4 Visualizer | `c4-visualizer/` | 원본 프레임에 판정 결과 마킹 → C1 전송 | 김세광 |
 | Nginx | `nginx/` | 외부 HTTPS 진입점(:443 → C1) + C3 로드밸런싱(:8080 내부, `least_conn`) | 김세광 |
 
@@ -38,11 +38,11 @@
 |---|---|---|
 | `bite` 한쪽 파임 | 가장자리가 원형으로 파임 (오목) | **오목 깊이** (작은 결손은 다른 세 지표로 못 잡음) |
 | `cut` 단면 절단 | 직선으로 잘림 (볼록) | **원 채움률** (원형도·solidity는 정상과 겹침) |
-| `wedge` 조각 결손 | 중심까지 부채꼴로 빠짐 (오목) | 세 지표 모두 |
+| `wedge` 조각 결손 | 중심까지 부채꼴로 빠짐 (오목) | 네 지표 모두 |
 | `half` 반쪽 파손 | 반원 (볼록) | 원형도, 원 채움률 |
 
 - 정상 쿠키는 원형도 약 0.90(픽셀 외곽 때문에 1.0이 아님), solidity 0.99, 원 채움률 0.97이다.
-  현재 기본 임계값(0.80 / 0.95 / 0.94 / 오목 깊이 0.06)은 이상적 마스크로 정했고, 시뮬레이터 4조건 채점에서 불량 Recall 1.000이다 (api-spec 7.3).
+  현재 기본 임계값(0.80 / 0.95 / 0.93 / 오목 깊이 0.06)은 이상적 마스크로 정했고, 시뮬레이터 4조건 채점에서 불량 Recall 1.000이다 (api-spec 7.3).
 - 라벨 JSON은 COCO와 비슷하다 (`bbox` = `[x, y, w, h]` 픽셀, `segmentation` = 180점 폴리곤 픽셀, 좌표는 저장된 PNG 픽셀 기준).
   `category`는 `round`/`deformed`, `defect_type`은 위 4종이다. 형식 분석은 performance-plan 7.1에 있다.
 - 화면 양 끝에는 일부만 보이는 과자가 항상 있다. 정상 과자가 잘려 보여 불량으로 판정되므로 판정·평가에서 빼야 한다 (api-spec 7.4).
@@ -146,7 +146,7 @@
 - 성능에 영향을 주는 변경을 했으면 `docs/performance-plan.md` 결과표 기준으로 다시 측정할 수 있게 한다.
 - 현재 상태: 뼈대 파이프라인이 동작한다 (`docker compose up` → `tools/fake_camera.py` 또는 폰으로 확인).
   남은 핵심 작업은 각 서비스 README의 "어디부터 채우면 되나"에 있다:
-  C2 `app/preprocess.py`, C3 `app/sam2_segmenter.py`(신규), C4 `app/draw.py`.
+  C2 `app/preprocess.py`. (C3 `app/sam2_segmenter.py`, C4 `app/draw.py`는 완료)
 - 서비스의 HTTP 처리(`main.py`)와 영상 처리 로직(`preprocess.py`, `*_segmenter.py`, `judge.py`, `draw.py`)은 분리한다.
   비전공 담당자는 로직 파일만 고치면 되게 하고, OpenCV/torch 연산은 `run_in_threadpool`로 호출한다.
 - 변경 후 확인: `docker compose up -d --build --scale c3-inference=2` → `python tools/fake_camera.py --seconds 10`

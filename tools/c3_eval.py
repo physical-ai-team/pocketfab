@@ -4,9 +4,9 @@ C2 박스 검출과 상관없이 C3만 평가하려고, 정답 bbox에 패딩을
 화면 가장자리에 걸린 과자는 뺀다 (api-spec 7.4).
 
     # 레포 루트에서. 데이터 폴더 = 시뮬레이터 프레임 PNG + 라벨 JSON 쌍 (같은 이름)
-    python tools/c3_eval.py data/sim/base                    # SEGMENTER=opencv
-    python tools/c3_eval.py data/sim/base --segmenter sam2   # SAM2_CHECKPOINT_DIR=checkpoints 필요
-    python tools/c3_eval.py data/sim/base --masks gt         # 정답 폴리곤으로 판정 규칙만 평가
+    python tools/c3_eval.py data/sim/calib                   # SEGMENTER=opencv
+    python tools/c3_eval.py data/sim/calib --segmenter sam2   # SAM2_CHECKPOINT_DIR=checkpoints 필요
+    python tools/c3_eval.py data/sim/calib --masks gt         # 정답 폴리곤으로 판정 규칙만 평가
 """
 
 import argparse
