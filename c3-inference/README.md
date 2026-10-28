@@ -1,12 +1,12 @@
 # C3 Inference — 담당: 박민성 (기술 지원: 김세광)
 
-C2가 준 박스를 프롬프트로 SAM 2 마스크를 뽑고, 원형도·solidity로 정상/불량을 판정한다.
+C2가 준 박스를 프롬프트로 SAM 2 마스크를 뽑고, 원형도·solidity·원 채움률로 정상/불량을 판정한다.
 스펙: [docs/api-spec.md](../docs/api-spec.md) 4장 ②③, 4.1, 7장
 
 ## 파일
 | 파일 | 내용 |
 |---|---|
-| `app/judge.py` | 원형도·solidity 계산과 판정 규칙. **완성됨** (SAM 2 모드도 그대로 사용) |
+| `app/judge.py` | 원형도·solidity·원 채움률 계산과 판정 규칙. **완성됨** (SAM 2 모드도 그대로 사용) |
 | `app/opencv_segmenter.py` | `SEGMENTER=opencv` 기준선. 박스 안 OpenCV 윤곽선 |
 | `app/main.py` | 서버. 한 번에 1장만 추론하고, 바쁘면 503 → Nginx가 다른 복제본으로 보냄 |
 | `tests/test_judge.py` | 판정 규칙 테스트 (`pytest`) |

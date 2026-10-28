@@ -37,7 +37,8 @@ def render(jpeg: bytes, meta: dict) -> tuple[bytes, dict]:
 
     for o in objects:
         x1, y1 = o["box"][0] * w, o["box"][1] * h
-        label = f"#{o['box_id']} {o['verdict'].upper()} C={o['circularity']:.2f} S={o['solidity']:.2f}"
+        label = (f"#{o['box_id']} {o['verdict'].upper()} C={o['circularity']:.2f} "
+                 f"S={o['solidity']:.2f} F={o['fill_ratio']:.2f}")
         put_text(img, label, (int(x1), max(int(y1) - 6, 60)), COLORS[o["verdict"]])
 
     ok, out = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
