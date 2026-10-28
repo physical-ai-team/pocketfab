@@ -80,9 +80,10 @@ async def main(args) -> int:
         await asyncio.sleep(2)  # 처리 중인 프레임의 결과를 조금 기다린다
         reader.cancel()
 
-    accepted, dropped = last.get("accepted", 0), last.get("dropped", 0)
-    print(f"\n요약: 보냄 {n}, 수락 {accepted}, 버림 {dropped} (C1 백프레셔 + 파이프라인 드롭 포함)")
-    if accepted - dropped <= 0:
+    processed = last.get("processed", 0)
+    print(f"\n요약: 보냄 {n}, 수락 {last.get('accepted', 0)}, 처리 {processed}, "
+          f"버림 {last.get('dropped', 0)} (C1 백프레셔 + 파이프라인 드롭 포함)")
+    if processed == 0:
         print("처리된 프레임이 없습니다. docker compose logs 로 각 서비스를 확인하세요.")
         return 1
     print("대시보드에서 결과를 확인하세요.")

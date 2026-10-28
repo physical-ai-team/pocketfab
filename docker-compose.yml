@@ -19,7 +19,9 @@ services:
     build: ./c1-gateway
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
-      MAX_IN_FLIGHT: ${MAX_IN_FLIGHT:-4}
+      MAX_IN_FLIGHT: ${MAX_IN_FLIGHT:-}               # 비우면 C3 복제본 수로 자동
+      IN_FLIGHT_PER_REPLICA: ${IN_FLIGHT_PER_REPLICA:-1}
+      C3_SERVICE_HOST: c3-inference
       C1_PIPELINE_TIMEOUT_S: ${C1_PIPELINE_TIMEOUT_S:-10}
       C2_URL: http://c2-preprocessing:8000/v1/frames
 
