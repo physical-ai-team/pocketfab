@@ -66,6 +66,44 @@ GPU용 compose 오버라이드로 코드 수정 없이 GPU로 전환할 수 있�
 | 이기태 | 하드웨어 | C1 Gateway, 촬영 환경 구축, 테스트 데이터 수집 |
 | 조아람 | 전자상거래 | C2 Preprocessing |
 
+## 작업 규칙 (브랜치·PR)
+
+**main에는 직접 push하지 않습니다.** 모든 작업은 브랜치에서 하고 Pull Request로 합칩니다.
+
+### 브랜치 이름
+
+`<type>/<scope>-<요약>` — 영문 소문자, 단어는 `-`로 연결합니다.
+
+| type | 언제 |
+|---|---|
+| `feat` | 새 기능 |
+| `fix` | 버그 수정 |
+| `docs` | 문서만 변경 |
+| `refactor` | 동작은 같고 코드만 정리 |
+| `test` | 테스트 추가·수정 |
+| `perf` | 성능 개선·측정 |
+| `chore` | 설정, 빌드, 의존성 |
+
+`scope`: `c1` `c2` `c3` `c4` `nginx` `infra`(compose 등 공통) `tools` `sim`(시뮬레이터). 문서 전반이면 생략할 수 있습니다.
+
+예: `feat/c1-qr`, `fix/c3-mask`, `feat/c2-box-detect`, `perf/c3-threads`, `docs/api-spec`
+
+### 작업 순서
+
+```powershell
+git switch main; git pull                  # 1. 최신 main에서 시작
+git switch -c feat/c2-box-detect           # 2. 브랜치 만들기
+git add -A; git commit -m "feat: C2 박스 검출 구현"   # 3. 작업하고 커밋
+git push -u origin feat/c2-box-detect      # 4. 올리기
+```
+
+5. GitHub에서 **Compare & pull request**를 눌러 PR을 만들고, 템플릿(변경 내용 / 확인 방법 / 스펙 변경 여부)을 채웁니다.
+6. 리뷰를 1명 이상 받은 뒤 **Squash and merge**로 합치고 브랜치를 삭제합니다.
+
+- PR 하나에는 주제 하나만 담습니다.
+- 커밋 메시지는 `<type>: <한국어 요약>` 형식입니다.
+- API 스펙(`docs/api-spec.md`)이나 환경변수를 바꾸는 PR은 영향을 받는 서비스 담당자에게 리뷰를 요청합니다.
+
 ## 폴더 구조
 
 ```
