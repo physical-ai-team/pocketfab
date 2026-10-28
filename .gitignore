@@ -1,0 +1,66 @@
+# ── 모델 파일 (SAM 2 체크포인트 등) ───────────────────────
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+checkpoints/
+
+# ── 테스트 영상·이미지 데이터 ────────────────────────────
+data/
+datasets/
+recordings/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.jpg
+*.jpeg
+*.png
+*.bmp
+# 문서용 그림과 웹페이지 정적 자원(아이콘 등)은 커밋한다
+!docs/**/*.png
+!docs/**/*.jpg
+!**/static/**/*.png
+!**/static/**/*.jpg
+
+# ── 성능 측정 결과물 ────────────────────────────────────
+results/
+*.log
+
+# ── 인증서·비밀 정보 ───────────────────────────────────
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+nginx/certs/
+.env
+.env.*
+!.env.example
+
+# ── Python ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# ── 에디터·OS ──────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Claude Code 개인 설정 ──────────────────────────────
+.claude/settings.local.json

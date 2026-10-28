@@ -1,0 +1,16 @@
+# 줄바꿈을 LF로 통일한다 (Linux 컨테이너에서 쓰는 nginx 설정·셸 스크립트가 CRLF면 오류가 남)
+* text=auto eol=lf
+
+# Windows 배치 파일은 CRLF가 필요하다
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 바이너리 파일 (줄바꿈 변환 금지)
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.mp4 binary
+*.pt binary
+*.pth binary
