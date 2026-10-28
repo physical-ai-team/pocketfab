@@ -63,8 +63,20 @@ python tools/c3_eval.py data/sim/test                        # 비교용: opencv
 
 | 날짜 | 세션 | 세그멘터 | 객체 수 | 불량 Precision | 불량 Recall | 정상 오경보율 | 유형 정확도 | 마스크 IoU | 임계값 (C/S/F/D) | 커밋 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| | test | sam2 | | | | | | | | |
-| | test | opencv | | | | | | | | |
+| 2026-10-28 | test | sam2 (tiny) | 532 | 0.995 | 1.000 | 0.3% (1/315) | 0.995 | 0.972 | 0.80 / 0.95 / 0.94 / 0.06 | 6d0ea4f |
+| 2026-10-28 | test | opencv | 532 | 1.000 | 1.000 | 0.0% (0/315) | 0.806 | 0.849 | 0.80 / 0.95 / 0.94 / 0.06 | 6d0ea4f |
+
+2026-10-28 측정 조건과 메모
+- 데이터: 세션마다 결손 55%(시연 설정) 15쌍 + 결손 25%(작은 불량) 15쌍. 결손 크기는 슬라이더 하나로 모든 불량에 적용되므로 나눠 캡처했다.
+  나머지는 시뮬레이터 기본값(라인 3, 지름 78px, 혼합 랜덤, 조명 불균일 20%, 노이즈 0%)에 불량률 40%, 간격 90프레임, 이미지 1314×450.
+- 보정(②): calib에서 기본 임계값으로 SAM 2 P 1.000 / R 1.000 / 정상 오경보 0/250 / 유형 정확도 1.000이 나와 **임계값을 바꾸지 않았다.**
+- sam2의 오경보 1건과 `half`→`bite` 1건 외에는 모두 맞혔다. opencv는 불량 여부는 다 맞히지만 `half`→`bite` 38개, `cut`→`bite` 4개로 유형을 틀린다.
+- SAM 2 지연 p50은 프레임당 약 4.2초 (과자 약 18개, 원본 해상도, C3 컨테이너에서 `TORCH_NUM_THREADS=8`). 로컬 conda에 torch가 없어서 C3 컨테이너 안에서 채점했다:
+  ```powershell
+  $r = (Get-Location).Path
+  docker compose run --rm --no-deps -v "${r}\tools:/srv/tools" -v "${r}\data:/srv/data" -v "${r}\c3-inference:/srv/c3-inference" `
+    -e TORCH_NUM_THREADS=8 -e OMP_NUM_THREADS=8 c3-inference python tools/c3_eval.py data/sim/test --segmenter sam2
+  ```
 
 참고: 박민성이 시뮬레이터 4조건에서 먼저 잰 결과(SAM 2 tiny, 4지표 기준)는 Recall 1.000, 유형 정확도 1.000, IoU 0.97이다 (api-spec 7.3).
 
