@@ -81,12 +81,12 @@ def detect_boxes(jpeg: bytes, proc_size: dict) -> list[dict]:
     # 5. 과자 하나로 볼 수 없는 덩어리는 버린다 (모니터 반사로 밝아진 배경, 붙어 버린 과자 두 개, 벨트 테두리 띠 등)
     blobs = drop_non_cookies(blobs, w, h)
 
+    # 6. 박스를 "과자 한 개 크기"에 맞춘다 (가장자리가 어둡게 찍힌 과자는 밝은 가운데만 잡혀 박스가 작아진다)
+    rects = grow_to_cookie_size([cv2.boundingRect(cnt) for _, cnt in blobs], w, h)
+
     boxes = []
     box_id = 0
-    for area, cnt in blobs:
-        # 사각형 바운딩 박스 추출 (x, y, w, h)
-        bx, by, bw, bh = cv2.boundingRect(cnt)
-
+    for (area, _), (bx, by, bw, bh) in zip(blobs, rects):
         # 박스 패딩 5% 추가 (과자 테두리가 잘리지 않도록 여유 공간 부여)
         pad_w = int(bw * 0.05)
         pad_h = int(bh * 0.05)
@@ -135,3 +135,32 @@ def drop_non_cookies(blobs: list, w: int, h: int) -> list:
         if on_edge or MIN_ASPECT <= bw / bh <= MAX_ASPECT:
             kept.append((a, c))
     return kept
+
+
+def grow_to_cookie_size(rects: list, w: int, h: int) -> list:
+    """(x, y, 폭, 높이) 박스들 중 "보통 과자"(폭·높이 중간값)보다 작은 박스를 중심은 그대로 둔 채 그 크기까지 넓힌다.
+
+    폰으로 모니터를 비스듬히 찍으면 한 줄 전체의 과자 가장자리가 어둡게 찍힌다. Otsu는 밝은 가운데만 과자로 잡아
+    박스가 과자보다 작아지고, C3(SAM 2)는 박스 밖으로 많이 나간 마스크를 지우므로 정상 과자가 잘려 불량이 된다.
+    모든 과자는 지름이 같으니, 작은 박스는 보통 과자 크기까지 넓혀도 된다. 화면 끝에 걸린 박스는 잘린 과자라 그대로 둔다.
+    """
+    def on_edge(r):
+        x, y, rw, rh = r
+        return x <= 1 or y <= 1 or x + rw >= w - 1 or y + rh >= h - 1
+
+    inner = [r for r in rects if not on_edge(r)]
+    if len(inner) < 3:  # 적으면 중간값을 믿기 어렵다
+        return rects
+    med_w = int(np.median([r[2] for r in inner]))
+    med_h = int(np.median([r[3] for r in inner]))
+
+    out = []
+    for r in rects:
+        x, y, rw, rh = r
+        if not on_edge(r) and (rw < med_w or rh < med_h):
+            cx, cy = x + rw / 2, y + rh / 2
+            rw, rh = max(rw, med_w), max(rh, med_h)
+            x = int(max(0, min(w - rw, cx - rw / 2)))
+            y = int(max(0, min(h - rh, cy - rh / 2)))
+        out.append((x, y, rw, rh))
+    return out

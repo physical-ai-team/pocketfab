@@ -47,6 +47,18 @@ def test_가늘고_긴_띠는_버린다():
     assert len(boxes) == n
 
 
+def test_가장자리가_어둡게_찍힌_과자도_박스는_과자_크기():
+    # 폰으로 모니터를 비스듬히 찍으면 가장자리가 어둡게 찍힌다 → 밝은 가운데만 잡혀 박스가 작아지던 문제
+    def dark_rim(img):
+        cv2.circle(img, (580, 90), R, (80, 45, 70), -1)        # 어두운 보라색 가장자리
+        cv2.circle(img, (580, 90), int(R * 0.7), COOKIE, -1)   # 밝은 가운데 (이것만 과자로 잡힌다)
+    boxes, n = frame(dark_rim)
+    assert len(boxes) == n + 1
+    b = min(boxes, key=lambda b: abs((b["box"][0] + b["box"][2]) / 2 * W - 580) + abs((b["box"][1] + b["box"][3]) / 2 * H - 90))
+    assert (b["box"][2] - b["box"][0]) * W >= 2 * R * 0.95  # 과자 지름만큼은 덮는다
+    assert (b["box"][3] - b["box"][1]) * H >= 2 * R * 0.95
+
+
 def test_화면_끝에_걸린_과자는_길쭉해도_남긴다():
     # 왼쪽 끝에 일부만 보이는 과자 (C4가 truncated로 표시하고 집계에서 뺀다. C2에서 지우지 않는다)
     boxes, n = frame(lambda img: cv2.circle(img, (8, 170), R, COOKIE, -1))
