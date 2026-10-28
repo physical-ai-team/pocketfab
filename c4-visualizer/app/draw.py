@@ -1,8 +1,9 @@
 """판정 결과를 원본 프레임 위에 그린다.
 
-과자마다: 윤곽선(불량 빨강 / 정상 초록 / 판단불가 노랑 / 화면 끝 회색) + 라벨
-  1줄: "#번호 판정 유형"     예) "#2 DEFECT bite"
-  2줄: 오목 깊이와 벗어난 지표 예) "depth 0.12  fill 0.91"
+과자마다 윤곽선(불량 빨강 / 정상 초록 / 판단불가 노랑 / 화면 끝 회색)을 그린다.
+과자가 작고 촘촘해도 읽히도록 글자는 불량·판단불가에만 짧게 쓴다.
+  불량:     "bite" + 판정을 가른 지표 "D0.13"   (D 오목 깊이, F 원 채움률, C 원형도, S solidity)
+  판단불가: "?" + 마스크 점수 "m0.42"
 검사선을 넘은 순간에는 그 과자와 검사선을 굵게 강조한다 (app/tracker.py의 tracking.counted).
 """
 
@@ -13,8 +14,9 @@ COLORS = {"normal": (80, 200, 80), "defect": (60, 60, 230), "uncertain": (0, 200
 EDGE_COLOR = (150, 150, 150)  # 화면 끝에 걸쳐 판정·집계에서 빠지는 과자
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 FILL_ALPHA = 0.25  # 불량 과자 안쪽을 반투명하게 칠하는 정도
-# 라벨에 쓰는 지표 약칭 (judge.py의 지표 이름 → 화면 글자)
-SHORT = {"circularity": "circ", "solidity": "solid", "fill_ratio": "fill", "concavity": "depth"}
+# 라벨에 쓰는 지표 약자 (judge.py의 지표 이름 → 화면 글자). 앞에 있는 지표일수록 먼저 고른다
+SHORT = {"concavity": "D", "fill_ratio": "F", "circularity": "C", "solidity": "S"}
+LEGEND = "D:depth F:fill C:circ S:solid"
 
 
 def put_text(img, text, org, color, scale=0.5):
@@ -40,16 +42,15 @@ def to_pixels(o: dict, w: int, h: int) -> np.ndarray:
 
 
 def labels(o: dict) -> list[str]:
-    """과자 옆에 쓸 글자 1~2줄."""
-    first = f"#{o['box_id']} {o['verdict'].upper()}"
+    """과자 위에 쓸 글자. 정상은 윤곽선만으로 충분하므로 빈 목록."""
     if o["verdict"] == "uncertain":
-        return [first, f"mask {o['mask_score']:.2f}"]
-    if o.get("defect_type"):
-        first += f" {o['defect_type']}"
-    # 오목 깊이는 항상 보여 주고(정상과 불량이 가장 잘 벌어지는 지표), 그 밖에는 벗어난 지표만 덧붙인다
-    second = [f"depth {o['concavity']:.2f}"]
-    second += [f"{SHORT.get(r, r)} {o[r]:.2f}" for r in o.get("defect_reasons", []) if r != "concavity"]
-    return [first, "  ".join(second)]
+        return ["?", f"m{o['mask_score']:.2f}"]
+    if o["verdict"] != "defect":
+        return []
+    # 판정을 가른 지표 하나만 쓴다 (오목 깊이 > 원 채움률 > 원형도 > solidity 순)
+    reasons = o.get("defect_reasons", [])
+    key = next((k for k in SHORT if k in reasons), None)
+    return [o.get("defect_type") or "defect", f"{SHORT[key]}{o[key]:.2f}" if key else ""]
 
 
 def render(jpeg: bytes, meta: dict) -> tuple[bytes, dict]:
@@ -72,15 +73,16 @@ def render(jpeg: bytes, meta: dict) -> tuple[bytes, dict]:
         pts = to_pixels(o, w, h)
         if o.get("truncated"):
             cv2.polylines(img, [pts], True, EDGE_COLOR, 1, cv2.LINE_AA)
-            continue  # 화면 끝 과자는 판정을 믿을 수 없으므로 라벨을 쓰지 않는다 (추적 번호 자리에 "edge" 표시)
+            continue  # 화면 끝 과자는 판정을 믿을 수 없으므로 라벨을 쓰지 않는다
         color = COLORS[o["verdict"]]
         cv2.polylines(img, [pts], True, color, 2, cv2.LINE_AA)
-        x1, y1 = int(o["box"][0] * w), int(o["box"][1] * h)
-        first, second = labels(o)
-        put_text(img, first, (x1, max(y1 - 20, 76)), color)
-        put_text(img, second, (x1, max(y1 - 6, 90)), color, 0.4)
+        lines = labels(o)
+        if lines:
+            x1, y1 = int(o["box"][0] * w), int(o["box"][1] * h)
+            put_text(img, lines[0], (x1, max(y1 - 16, 12)), color, 0.45)
+            put_text(img, lines[1], (x1, max(y1 - 3, 25)), color, 0.38)
 
-    put_text(img, f"frame {meta['frame_id']}  replica {replica}", (8, 20), (255, 255, 255))
+    put_text(img, f"frame {meta['frame_id']}  replica {replica}   {LEGEND}", (8, 20), (255, 255, 255))
     put_text(img, f"objects {summary['total']}  normal {summary['normal']}  "
                   f"defect {summary['defect']}  uncertain {summary['uncertain']}", (8, 42), (255, 255, 255))
 
@@ -89,7 +91,7 @@ def render(jpeg: bytes, meta: dict) -> tuple[bytes, dict]:
 
 
 def draw_tracking(img, meta: dict):
-    """검사선, 과자 단위 누적 집계, 추적 번호, 검사선 통과 강조 (app/tracker.py 결과)."""
+    """검사선, 과자 단위 누적 집계, 검사선 통과 강조 (app/tracker.py 결과)."""
     tracking = meta.get("tracking")
     if not tracking:
         return
@@ -108,16 +110,14 @@ def draw_tracking(img, meta: dict):
     put_text(img, f"COUNTED {t['total']}  normal {t['normal']}  defect {t['defect']}  "
                   f"uncertain {t['uncertain']}", (8, h - 12), (255, 255, 255))
 
+    # 추적 번호는 화면에 쓰지 않는다 (과자가 촘촘하면 글자가 겹친다). 방금 집계된 과자만 굵은 박스로 표시
     verdict_of = {c["track_id"]: c["verdict"] for c in counted}
     for o in meta.get("objects", []):
-        x1, y2 = o["box"][0] * w, o["box"][3] * h
-        tag = "edge" if o.get("truncated") else f"T{o.get('track_id')}"
-        put_text(img, tag, (int(x1), min(int(y2) + 14, h - 30)), (200, 200, 200), 0.4)
-        if o.get("track_id") in verdict_of:  # 방금 집계된 과자는 박스를 굵게 둘러 눈에 띄게 한다
+        if o.get("track_id") in verdict_of:
             bx1, by1, bx2, by2 = o["box"]
             cv2.rectangle(img, (int(bx1 * w) - 4, int(by1 * h) - 4), (int(bx2 * w) + 4, int(by2 * h) + 4),
                           COLORS[verdict_of[o["track_id"]]], 3, cv2.LINE_AA)
 
     for i, c in enumerate(counted):
-        put_text(img, f"+1 T{c['track_id']} {c['verdict'].upper()}", (line_x + 6, 70 + 22 * i),
+        put_text(img, f"+1 {c['verdict'].upper()}", (line_x + 6, 70 + 22 * i),
                  COLORS[c["verdict"]], 0.6)
