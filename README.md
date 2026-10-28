@@ -263,7 +263,8 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 
 ### 하루 전 준비
 
-1. `.env`에 `PUBLIC_HOST`(PC의 LAN IP)와 `SEGMENTER=sam2`를 넣고, `python scripts/download_checkpoints.py tiny`로 체크포인트를 받습니다.
+1. `.env`에 `PUBLIC_HOST`(PC의 LAN IP), `SEGMENTER=sam2`, `FILL_RATIO_THRESHOLD=0.91`을 넣고,
+   `python scripts/download_checkpoints.py tiny`로 체크포인트를 받습니다. 원 채움률 0.91은 시연용 값입니다 (아래 "시뮬레이터 시연 설정").
 2. `docker compose up -d --build --scale c3-inference=2`로 미리 빌드합니다. 처음 빌드는 torch 설치 때문에 오래 걸립니다.
 3. 폰으로 QR을 찍어 한 번 접속하고, **인증서 경고를 미리 넘겨 둡니다** ("고급 → 계속 진행"). 방화벽 443 허용도 이때 확인합니다 (실행 방법 5).
 4. 아래 순서대로 **처음부터 끝까지 한 번 리허설**합니다. 대시보드 "누적 집계"가 시뮬레이터 카운터와 비슷하게 올라가는지 봅니다.
@@ -272,9 +273,13 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ### 시뮬레이터 시연 설정
 
 - **정답 외곽선 표시는 끕니다.** 화면의 외곽선이 폰 카메라에 그대로 찍혀서 검출에 섞입니다.
-- **컨베이어 속도를 30~40px/s로 낮춥니다** (`SEGMENTER=sam2`일 때). SAM 2는 CPU에서 프레임당 약 3초라 처리 fps가 1보다 낮습니다.
-  C4 집계는 처리된 프레임 사이에 과자가 과자 간격의 약 80%보다 덜 움직여야 정확합니다 (api-spec 4.2).
-  `SEGMENTER=opencv`로 시연하면 기본 속도(130px/s)를 써도 됩니다.
+- **폰 화면을 컨베이어로 꽉 채웁니다.** 과자가 작게 찍힐수록 정상 과자의 원 채움률이 내려가 불량으로 오판합니다.
+  640px 화면에서 과자 지름이 약 49px(꽉 채움)이면 오경보가 없지만, 약 38px(조금 멀리서)이면 정상 과자의 절반 가까이가 `cut`으로 나옵니다.
+  C2 밝기 보정(CLAHE)도 작은 과자에서 원 채움률을 더 낮춥니다. 그래서 시연 `.env`는 원 채움률을 0.91로 낮춰 여유를 둡니다
+  (49px 기준 정상 최소 0.930, 결손 55% `cut` 최대 0.88).
+- **컨베이어 속도를 25px/s 정도로 낮춥니다** (`SEGMENTER=sam2`일 때). 복제본 2개가 CPU를 나눠 쓰면 C3 추론이 프레임당 7~9초 걸려,
+  결과가 3~4초마다 하나씩 나옵니다. C4 집계는 처리된 프레임 사이에 과자가 과자 간격의 약 80%보다 덜 움직여야 정확합니다 (api-spec 4.2).
+  리허설에서 대시보드 "누적 집계"가 시뮬레이터 카운터와 맞는지 보고 속도를 정합니다. `SEGMENTER=opencv`로 시연하면 기본 속도(130px/s)를 써도 됩니다.
 - 라인 수, 지름, 결손 크기는 평가 데이터(`data/sim/calib`, `test`)를 만들 때와 같게 둡니다. 그래야 보정한 임계값이 그대로 맞습니다.
 
 ### 시연 순서
