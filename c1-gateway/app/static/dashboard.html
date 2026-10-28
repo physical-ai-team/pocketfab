@@ -72,7 +72,8 @@ function onStats(s) {
   const reps = Object.entries(s.replicas || {}).map(([k, v]) => [`└ ${k}`, `${v} fps`]);
   $("stats").innerHTML = rows([
     ["입력", `${s.input_fps} fps`], ["처리", `${s.processed_fps} fps`],
-    ["드롭률", `${(s.drop_rate * 100).toFixed(0)}%`], ["처리 중", s.in_flight], ...reps,
+    ["드롭률", `${(s.drop_rate * 100).toFixed(0)}%`], ["처리 중 / 한도", `${s.in_flight} / ${s.max_in_flight}`],
+    ["C3 복제본", s.c3_replicas], ...reps,
   ]);
 }
 

@@ -172,7 +172,7 @@ PC 브라우저에서 `https://localhost/`을 열면 합성 영상(`fake N`)이 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
 | `PUBLIC_HOST` | `localhost` | 폰이 접속할 PC의 LAN IP |
-| `MAX_IN_FLIGHT` | `4` | 동시에 처리 중일 수 있는 프레임 수. C3 복제본 수와 비슷하게 맞춤 |
+| `MAX_IN_FLIGHT` | (비움 = 자동) | 동시에 처리 중일 수 있는 프레임 수. 비우면 C3 복제본 수 × `IN_FLIGHT_PER_REPLICA`(기본 1)로 자동 결정되고, `--scale`을 바꾸면 5초 안에 따라갑니다. 값을 넣으면 그 값을 우선합니다 |
 | `SEGMENTER` | `opencv` | `opencv` / `sam2`(구현 예정) |
 | `SKIP_C3_IF_NO_BOXES` | `false` | C2 박스 검출 구현 후 `true`로 변경 |
 | `SIMULATED_INFER_MS` | `0` | C3 추론 시간을 흉내 내는 지연. 로드밸런싱 시험용 |

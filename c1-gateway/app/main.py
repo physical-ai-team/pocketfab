@@ -26,7 +26,11 @@ from fastapi.responses import FileResponse, Response
 from PIL import Image
 
 PUBLIC_HOST = os.getenv("PUBLIC_HOST", "localhost")
-MAX_IN_FLIGHT = int(os.getenv("MAX_IN_FLIGHT", "4"))
+# 비워두면 C3 복제본 수 × IN_FLIGHT_PER_REPLICA로 자동 결정한다. 값을 넣으면 그 값을 우선한다.
+MAX_IN_FLIGHT_ENV = os.getenv("MAX_IN_FLIGHT", "").strip()
+IN_FLIGHT_PER_REPLICA = int(os.getenv("IN_FLIGHT_PER_REPLICA", "1"))
+C3_SERVICE_HOST = os.getenv("C3_SERVICE_HOST", "c3-inference")
+REPLICA_CHECK_INTERVAL_S = 5
 C2_URL = os.getenv("C2_URL", "http://c2-preprocessing:8000/v1/frames")
 PIPELINE_TIMEOUT_S = float(os.getenv("C1_PIPELINE_TIMEOUT_S", "10"))
 
@@ -68,7 +72,7 @@ class Session:
         self.id = uuid.uuid4().hex[:8]
         self.next_frame_id = 0
         self.last_shown = -1  # 대시보드에 마지막으로 표시한 frame_id
-        self.sent = self.accepted = self.dropped = 0
+        self.sent = self.accepted = self.dropped = self.processed_total = 0
         self.processed = Window()
 
 
@@ -77,6 +81,8 @@ sessions: dict[str, Session] = {}
 dashboards: set[WebSocket] = set()
 pipeline_tasks: set[asyncio.Task] = set()
 in_flight = 0
+max_in_flight = int(MAX_IN_FLIGHT_ENV) if MAX_IN_FLIGHT_ENV else IN_FLIGHT_PER_REPLICA
+c3_replicas: int | None = None  # DNS로 센 C3 복제본 수 (모르면 None)
 win_input, win_processed, win_dropped = Window(), Window(), Window()
 totals = {"received": 0, "accepted": 0, "processed": 0, "stale": 0}
 drops = Counter()      # "stage:reason" → 횟수
@@ -100,7 +106,7 @@ def handle_frame(session: Session, jpeg: bytes):
     win_input.add()
 
     # 백프레셔: 처리 중인 프레임이 많으면 새 프레임은 버린다
-    if in_flight >= MAX_IN_FLIGHT:
+    if in_flight >= max_in_flight:
         record_drop(session, "c1", "c1_busy")
         return
 
@@ -158,6 +164,8 @@ def dashboard_stats() -> dict:
         "processed_fps": win_processed.count(),
         "drop_rate": round(win_dropped.count() / n_in, 3) if n_in else 0.0,
         "in_flight": in_flight,
+        "max_in_flight": max_in_flight,
+        "c3_replicas": c3_replicas,
         "replicas": win_processed.count_by_tag(),
     }
 
@@ -176,14 +184,38 @@ async def stats_loop():
         await broadcast(dashboard_stats())
 
 
+async def count_c3_replicas() -> int | None:
+    """Docker 내장 DNS는 서비스 이름에 복제본 전체의 IP를 돌려준다. 그 개수가 복제본 수다."""
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(C3_SERVICE_HOST, 8000, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return None  # Docker 밖에서 실행했거나 C3가 아직 없음
+    return len({info[4][0] for info in infos})
+
+
+async def replica_watch_loop():
+    """C3 복제본 수를 주기적으로 확인한다. --scale로 바꾸면 몇 초 안에 한도가 따라간다."""
+    global c3_replicas, max_in_flight
+    while True:
+        n = await count_c3_replicas()
+        if n != c3_replicas:
+            c3_replicas = n
+            if not MAX_IN_FLIGHT_ENV:
+                max_in_flight = max(1, (n or 1) * IN_FLIGHT_PER_REPLICA)
+            log.info("C3 복제본 %s개 → MAX_IN_FLIGHT=%d (%s)", n if n is not None else "?",
+                     max_in_flight, "지정값" if MAX_IN_FLIGHT_ENV else "자동")
+        await asyncio.sleep(REPLICA_CHECK_INTERVAL_S)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global client
     client = httpx.AsyncClient(timeout=PIPELINE_TIMEOUT_S)
-    task = asyncio.create_task(stats_loop())
-    log.info("C1 시작: PUBLIC_HOST=%s MAX_IN_FLIGHT=%d", PUBLIC_HOST, MAX_IN_FLIGHT)
+    tasks = [asyncio.create_task(stats_loop()), asyncio.create_task(replica_watch_loop())]
+    log.info("C1 시작: PUBLIC_HOST=%s", PUBLIC_HOST)
     yield
-    task.cancel()
+    for t in tasks:
+        t.cancel()
     await client.aclose()
 
 
@@ -211,7 +243,12 @@ async def qr():
 
 @app.get("/v1/config")
 async def config():
-    return {"camera_url": f"https://{PUBLIC_HOST}/camera", "max_in_flight": MAX_IN_FLIGHT}
+    return {
+        "camera_url": f"https://{PUBLIC_HOST}/camera",
+        "max_in_flight": max_in_flight,
+        "max_in_flight_source": "env" if MAX_IN_FLIGHT_ENV else "auto",
+        "c3_replicas": c3_replicas,
+    }
 
 
 @app.get("/healthz")
@@ -244,7 +281,8 @@ async def ws_camera(ws: WebSocket):
             await ws.send_json({
                 "type": "stats", "session_id": session.id,
                 "sent": session.sent, "accepted": session.accepted,
-                "dropped": session.dropped, "processed_fps": session.processed.count(),
+                "dropped": session.dropped, "processed": session.processed_total,
+                "processed_fps": session.processed.count(),
             })
 
     stats_task = asyncio.create_task(push_stats())
@@ -306,6 +344,7 @@ async def results(meta: str = Form(...), image: UploadFile = File(...)):
             return {"ok": True, "shown": False}
         session.last_shown = m["frame_id"]
         session.processed.add()
+        session.processed_total += 1
 
     replica = (m.get("inference") or {}).get("replica")
     totals["processed"] += 1

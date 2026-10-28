@@ -144,12 +144,17 @@ C1 ◀──①응답── C2 ◀──②응답── C3 ◀──③응답─
   ```
 - **서버 → 클라이언트 (텍스트, 1초마다)**: 상태 피드백
   ```json
-  { "type": "stats", "sent": 300, "accepted": 120, "dropped": 180, "processed_fps": 4.0 }
+  { "type": "stats", "session_id": "b7f3c2e1", "sent": 300, "accepted": 120, "dropped": 180,
+    "processed": 115, "processed_fps": 4 }
   ```
 
 C1은 프레임을 받으면 `frame_id`와 `c1_recv`를 부여한다. **in-flight 수가 `MAX_IN_FLIGHT` 이상이면
 C2로 보내지 않고 즉시 버린다** (`dropped`, `stage: "c1"`). 30fps 입력을 그대로 처리할 수 없는
 CPU 환경에서 지연이 쌓이지 않게 하는 핵심 장치다.
+
+`MAX_IN_FLIGHT`의 기본값은 C3 복제본 수에서 자동으로 정한다 (6장). 복제본 1개당 1장이 기본인 이유는 다음과 같다.
+이보다 크게 잡으면 C3가 거절할(503) 프레임까지 C2 전처리를 거치게 되어 CPU를 낭비한다.
+추론 200ms·복제본 2개 실험에서 1장이면 8.0fps(드롭은 모두 C1 입구), 2장이면 8.9fps(209장이 C3에서 거절)였다.
 
 ---
 
@@ -315,8 +320,9 @@ C1은 `frame_id`가 해당 세션에서 마지막으로 표시한 번호보다 �
 
 서버 → 클라이언트 (1초마다):
 ```json
-{ "type": "stats", "input_fps": 30.0, "processed_fps": 4.0, "drop_rate": 0.87, "in_flight": 4,
-  "replicas": { "c3-inference-1": 2.1, "c3-inference-2": 1.9 } }
+{ "type": "stats", "input_fps": 30, "processed_fps": 4, "drop_rate": 0.87,
+  "in_flight": 2, "max_in_flight": 2, "c3_replicas": 2,
+  "replicas": { "ee8b29335cb5": 2, "d570a57d09e3": 2 } }
 ```
 `replicas`는 최근 1초간 복제본별 처리 fps다.
 
@@ -326,7 +332,7 @@ C1은 `frame_id`가 해당 세션에서 마지막으로 표시한 번호보다 �
 | GET | `/` | 대시보드 페이지 |
 | GET | `/camera` | 스마트폰 카메라 페이지 |
 | GET | `/qr` | `https://<PUBLIC_HOST>/camera`를 담은 QR 이미지 (PNG) |
-| GET | `/v1/config` | 대시보드용 설정 (`camera_url`, `max_in_flight`) |
+| GET | `/v1/config` | 대시보드용 설정 (`camera_url`, `max_in_flight`, `max_in_flight_source`: `auto`/`env`, `c3_replicas`) |
 | GET | `/v1/metrics` | 누적 통계 JSON (성능 측정 스크립트가 수집) |
 
 ---
@@ -338,7 +344,9 @@ CPU/GPU 전환과 튜닝 값은 **코드에 하드코딩하지 않고 환경변�
 | 변수 | 서비스 | 기본값 | 설명 |
 |---|---|---|---|
 | `PUBLIC_HOST` | C1 | (필수) | 폰이 접속할 PC의 LAN IP. QR에 들어감 |
-| `MAX_IN_FLIGHT` | C1 | `4` | 동시에 파이프라인에 들어갈 수 있는 프레임 수 (대략 C3 복제본 수 × 1~2) |
+| `MAX_IN_FLIGHT` | C1 | (비움 = 자동) | 동시에 파이프라인에 들어갈 수 있는 프레임 수. 비우면 `C3 복제본 수 × IN_FLIGHT_PER_REPLICA`로 자동 계산하고, 값을 넣으면 그 값을 우선한다 |
+| `IN_FLIGHT_PER_REPLICA` | C1 | `1` | 자동 계산 시 복제본 1개당 허용 프레임 수 |
+| `C3_SERVICE_HOST` | C1 | `c3-inference` | 복제본 수를 셀 때 조회하는 DNS 이름. Docker DNS가 복제본 전체의 IP를 돌려주며, 5초마다 다시 센다 |
 | `C1_PIPELINE_TIMEOUT_S` | C1 | `10` | ① 요청 타임아웃 |
 | `PREPROC_WIDTH` | C2 | `640` | 리사이즈 가로 픽셀 (종횡비 유지) |
 | `BOX_MIN_AREA_RATIO` | C2 | `0.005` | 이보다 작은 후보는 노이즈로 보고 제외 |
