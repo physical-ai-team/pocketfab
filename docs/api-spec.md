@@ -428,7 +428,7 @@ CPU/GPU 전환과 튜닝 값은 **코드에 하드코딩하지 않고 환경변�
 | `COUNT_LINE_X` | C4 | `0.34` | 검사선 x 위치 (화면 폭 비율). 시뮬레이터의 검사선과 같다 |
 | `COUNT_DIRECTION` | C4 | `left` | 과자 이동 방향 `left` / `right` |
 | `TRACK_MAX_SPEED` | C4 | `1.0` | 과자의 최대 속도 (화면 폭/초). 이보다 빨리 움직인 것은 같은 과자로 보지 않는다 |
-| `TRACK_MAX_AGE_S` | C4 | `2.0` | 이 시간 동안 안 보이면 추적을 끝낸다 |
+| `TRACK_MAX_AGE_S` | C4 | `15` | 이 시간 동안 안 보이면 추적을 끝낸다. 결과가 오는 간격보다 길어야 한다 (SAM 2 CPU 복제본 2개면 4~5초). 2초였을 때 SAM 2 시연에서 누적 집계가 0으로 남았다 |
 | `EDGE_MARGIN` | C4 | `0.01` | 박스가 화면 끝에서 이 비율 안에 닿으면 잘린 과자(`truncated`)로 본다 |
 
 GPU 전환 계획: C3 Dockerfile에 빌드 인자 `TORCH_VARIANT=cpu|cu124`를 두고,

@@ -13,13 +13,13 @@ D, GAP, SPEED = 78, 90, 130
 LINES_Y = [75, 225, 375]
 
 
-def scene(t: float, verdict_of=lambda line, k: "normal") -> list[dict]:
+def scene(t: float, verdict_of=lambda line, k: "normal", speed=SPEED) -> list[dict]:
     """시각 t의 화면에 보이는 과자 목록 (C3 출력 objects 형식)."""
     objs = []
     pitch = D + GAP
     for line, cy in enumerate(LINES_Y):
         for k in range(40):  # k번째 과자: 처음엔 화면 오른쪽 밖에 있다가 왼쪽으로 이동
-            cx = W + D / 2 + k * pitch - SPEED * t
+            cx = W + D / 2 + k * pitch - speed * t
             if cx + D / 2 < 0 or cx - D / 2 > W:
                 continue
             box = [max(cx - D / 2, 0) / W, (cy - D / 2) / H, min(cx + D / 2, W) / W, (cy + D / 2) / H]
@@ -27,25 +27,25 @@ def scene(t: float, verdict_of=lambda line, k: "normal") -> list[dict]:
     return objs
 
 
-def crossed(t_end: float) -> int:
+def crossed(t_end: float, speed=SPEED) -> int:
     """t_end까지 검사선을 지난 과자 수 (정답)."""
     line_px = tracker.COUNT_LINE_X * W
     n = 0
     for _ in LINES_Y:
         for k in range(40):
-            if W + D / 2 + k * (D + GAP) - SPEED * t_end <= line_px:
+            if W + D / 2 + k * (D + GAP) - speed * t_end <= line_px:
                 n += 1
     return n
 
 
-def run(fps: float, seconds: float, verdict_of=lambda line, k: "normal", shuffle_every=0):
+def run(fps: float, seconds: float, verdict_of=lambda line, k: "normal", shuffle_every=0, speed=SPEED):
     st = SessionTracker()
     frames = [(i, i / fps) for i in range(int(seconds * fps))]
     if shuffle_every:  # C3 복제본 때문에 순서가 뒤바뀌는 상황: 이웃한 두 프레임을 맞바꾼다
         for j in range(0, len(frames) - 1, shuffle_every):
             frames[j], frames[j + 1] = frames[j + 1], frames[j]
     for frame_id, t in frames:
-        st.update(frame_id, t, scene(t, verdict_of))
+        st.update(frame_id, t, scene(t, verdict_of, speed))
     return st
 
 
@@ -66,6 +66,16 @@ def test_each_cookie_counted_once_at_low_fps():
     for fps in (3, 2, 1):
         st = run(fps=fps, seconds=SECONDS)
         assert abs(st.totals["total"] - crossed(last_t(fps))) <= 1, fps
+
+
+def test_sam2_cpu_speed_keeps_tracks():
+    # 줌 시연: SAM 2(CPU) 복제본 2개면 결과가 4~5초마다 온다. 시뮬레이터는 25px/s로 낮춘다
+    # (프레임 사이 이동 약 112px < 과자 간격 168px). 추적 유지 시간이 결과 간격보다 짧으면 집계가 0이 된다.
+    fps, speed, seconds = 1 / 4.5, 25, 200
+    st = run(fps=fps, seconds=seconds, speed=speed)
+    expected = crossed((int(seconds * fps) - 1) / fps, speed)
+    assert expected > 10
+    assert abs(st.totals["total"] - expected) <= 1
 
 
 def test_out_of_order_frames_do_not_double_count():
