@@ -54,5 +54,11 @@ services:
 
   c4-visualizer:
     build: ./c4-visualizer
+    # ⚠️ C4는 복제하지 않는다 (--scale c4-visualizer 금지). 과자 추적 상태가 프로세스 메모리에 있다 (api-spec 4.2)
     environment:
       C1_URL: http://c1-gateway:8000/v1/results
+      COUNT_LINE_X: ${COUNT_LINE_X:-0.34}
+      COUNT_DIRECTION: ${COUNT_DIRECTION:-left}
+      TRACK_MAX_SPEED: ${TRACK_MAX_SPEED:-1.0}
+      TRACK_MAX_AGE_S: ${TRACK_MAX_AGE_S:-2.0}
+      EDGE_MARGIN: ${EDGE_MARGIN:-0.01}

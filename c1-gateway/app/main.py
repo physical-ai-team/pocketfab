@@ -364,5 +364,6 @@ async def results(meta: str = Form(...), image: UploadFile = File(...)):
         ],
         "latency_ms": latency_ms(m["timings"]),
         "replica": replica,
+        "tracking": m.get("tracking"),  # C4의 과자 단위 누적 집계 (api-spec 4.2)
     })
     return {"ok": True, "shown": True}
