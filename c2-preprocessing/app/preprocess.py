@@ -56,9 +56,11 @@ def detect_boxes(jpeg: bytes, proc_size: dict) -> list[dict]:
 
     h, w = proc_size["h"], proc_size["w"]
 
-    # 2. 그레이스케일 변환 및 이진화 (THRESH_BINARY로 변경하여 밝은 과자가 잡히도록 수정)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # 2. 색으로 이진화한다: 과자는 노랑·주황(따뜻한 색), 벨트는 회색·하늘색(차가운 색)이다.
+    #    LAB 색공간의 b 채널은 "파랑(작음) ↔ 노랑(큼)" 축이라, 이 값에 Otsu를 쓰면 과자가 흰색으로 남는다.
+    #    밝기(흑백)로 나누면 모니터 반사로 하얗게 뜬 과자와 벨트를 구분하지 못한다 (실측: 아래 줄 검출 2.3배 차이).
+    warmth = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[:, :, 2]
+    _, thresh = cv2.threshold(warmth, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # 3. 모폴로지: 닫힘으로 초코칩 구멍을 먼저 메우고, 열림으로 작은 잡음 제거
     kernel = np.ones((5, 5), np.uint8)
@@ -81,12 +83,12 @@ def detect_boxes(jpeg: bytes, proc_size: dict) -> list[dict]:
     # 5. 과자 하나로 볼 수 없는 덩어리는 버린다 (모니터 반사로 밝아진 배경, 붙어 버린 과자 두 개, 벨트 테두리 띠 등)
     blobs = drop_non_cookies(blobs, w, h)
 
+    # 6. 박스를 "과자 한 개 크기"에 맞춘다 (가장자리가 어둡게 찍힌 과자는 밝은 가운데만 잡혀 박스가 작아진다)
+    rects = grow_to_cookie_size([cv2.boundingRect(cnt) for _, cnt in blobs], w, h)
+
     boxes = []
     box_id = 0
-    for area, cnt in blobs:
-        # 사각형 바운딩 박스 추출 (x, y, w, h)
-        bx, by, bw, bh = cv2.boundingRect(cnt)
-
+    for (area, _), (bx, by, bw, bh) in zip(blobs, rects):
         # 박스 패딩 5% 추가 (과자 테두리가 잘리지 않도록 여유 공간 부여)
         pad_w = int(bw * 0.05)
         pad_h = int(bh * 0.05)
@@ -122,7 +124,9 @@ def drop_non_cookies(blobs: list, w: int, h: int) -> list:
     """(면적, 윤곽선) 목록에서 과자로 보기 어려운 것을 뺀다.
 
     - 너무 큰 덩어리: 면적 중간값의 MAX_AREA_VS_MEDIAN배 초과 (덩어리가 3개 이상일 때만. 적으면 중간값을 믿기 어렵다)
-    - 너무 길쭉한 덩어리: 가로/세로 비가 MIN_ASPECT~MAX_ASPECT 밖. 단, 화면 끝에 걸린 과자는 잘려서 길쭉하므로 봐준다
+    - 너무 길쭉한 덩어리: 가로/세로 비가 MIN_ASPECT~MAX_ASPECT 밖.
+      단, 좌우 끝에 걸린 과자는 세로로 가늘게 잘리므로 "너무 가는 쪽"(MIN_ASPECT 미만)만 봐준다.
+      가로로 긴 띠(MAX_ASPECT 초과)는 어디에 있든 과자가 아니다 (화면 테두리 띠, 벨트 경계선 등)
     """
     if len(blobs) >= 3:
         median = float(np.median([a for a, _ in blobs]))
@@ -131,7 +135,37 @@ def drop_non_cookies(blobs: list, w: int, h: int) -> list:
     kept = []
     for a, c in blobs:
         bx, by, bw, bh = cv2.boundingRect(c)
-        on_edge = bx <= 1 or by <= 1 or bx + bw >= w - 1 or by + bh >= h - 1
-        if on_edge or MIN_ASPECT <= bw / bh <= MAX_ASPECT:
+        on_side_edge = bx <= 1 or bx + bw >= w - 1
+        aspect = bw / bh
+        if aspect <= MAX_ASPECT and (aspect >= MIN_ASPECT or on_side_edge):
             kept.append((a, c))
     return kept
+
+
+def grow_to_cookie_size(rects: list, w: int, h: int) -> list:
+    """(x, y, 폭, 높이) 박스들 중 "보통 과자"(폭·높이 중간값)보다 작은 박스를 중심은 그대로 둔 채 그 크기까지 넓힌다.
+
+    폰으로 모니터를 비스듬히 찍으면 한 줄 전체의 과자 가장자리가 어둡게 찍힌다. Otsu는 밝은 가운데만 과자로 잡아
+    박스가 과자보다 작아지고, C3(SAM 2)는 박스 밖으로 많이 나간 마스크를 지우므로 정상 과자가 잘려 불량이 된다.
+    모든 과자는 지름이 같으니, 작은 박스는 보통 과자 크기까지 넓혀도 된다. 화면 끝에 걸린 박스는 잘린 과자라 그대로 둔다.
+    """
+    def on_edge(r):
+        x, y, rw, rh = r
+        return x <= 1 or y <= 1 or x + rw >= w - 1 or y + rh >= h - 1
+
+    inner = [r for r in rects if not on_edge(r)]
+    if len(inner) < 3:  # 적으면 중간값을 믿기 어렵다
+        return rects
+    med_w = int(np.median([r[2] for r in inner]))
+    med_h = int(np.median([r[3] for r in inner]))
+
+    out = []
+    for r in rects:
+        x, y, rw, rh = r
+        if not on_edge(r) and (rw < med_w or rh < med_h):
+            cx, cy = x + rw / 2, y + rh / 2
+            rw, rh = max(rw, med_w), max(rh, med_h)
+            x = int(max(0, min(w - rw, cx - rw / 2)))
+            y = int(max(0, min(h - rh, cy - rh / 2)))
+        out.append((x, y, rw, rh))
+    return out
