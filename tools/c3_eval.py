@@ -3,7 +3,7 @@
 C2 박스 검출과 상관없이 C3만 평가하려고, 정답 bbox에 패딩을 붙여 C2 박스처럼 넣는다.
 화면 가장자리에 걸린 과자는 뺀다 (api-spec 7.4).
 
-    # 레포 루트에서. 데이터 폴더 = 시뮬레이터 frame_*.png + frame_*.json 쌍
+    # 레포 루트에서. 데이터 폴더 = 시뮬레이터 프레임 PNG + 라벨 JSON 쌍 (같은 이름)
     python tools/c3_eval.py data/sim/base                    # SEGMENTER=opencv
     python tools/c3_eval.py data/sim/base --segmenter sam2   # SAM2_CHECKPOINT_DIR=checkpoints 필요
     python tools/c3_eval.py data/sim/base --masks gt         # 정답 폴리곤으로 판정 규칙만 평가
@@ -65,7 +65,8 @@ def main():
 
     for data in args.data:
         rows, ious, lat = [], [], []
-        for jp in sorted(data.glob("frame_*.json")):
+        # 팀 규칙 이름(0001.png + 0001.json)과 시뮬레이터 기본 이름(frame_*.png) 모두 읽는다
+        for jp in sorted(p for p in data.glob("*.json") if p.with_suffix(".png").exists()):
             doc = json.loads(jp.read_text(encoding="utf-8"))
             w, h = doc["image"]["width"], doc["image"]["height"]
             anns = [a for a in doc["annotations"] if not is_truncated(a["bbox"], w, h)]
