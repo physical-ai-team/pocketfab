@@ -10,7 +10,9 @@ def test_추적_기록은_세션별_파일에_한_줄씩_남는다(tmp_path, mon
     meta = {
         "session_id": "abc", "frame_id": 7, "timings": {"c1_recv": 12_000.0},
         "objects": [{"box_id": 0, "box": [0.1, 0.2, 0.2, 0.4], "verdict": "defect", "defect_type": "bite",
-                     "track_id": 3, "truncated": False, "polygon": [[0, 0]], "circularity": 0.7}],
+                     "track_id": 3, "truncated": False, "polygon": [[0, 0]], "circularity": 0.7,
+                     "solidity": 0.93, "fill_ratio": 0.9, "concavity": 0.12, "mask_score": 0.95,
+                     "defect_reasons": ["solidity", "concavity"]}],
         "tracking": {"count_line_x": 0.34, "direction": "left", "used_for_tracking": True,
                      "counted": [], "totals": {"total": 0, "normal": 0, "defect": 0, "uncertain": 0}, "active_tracks": 1},
     }
@@ -21,7 +23,15 @@ def test_추적_기록은_세션별_파일에_한_줄씩_남는다(tmp_path, mon
     assert len(lines) == 2
     first = json.loads(lines[0])
     assert first["frame_id"] == 7 and first["t"] == 12.0
-    # 분석·재생에 필요한 필드만 남긴다 (윤곽선 같은 큰 값은 뺀다)
+    # 분석·재생에 필요한 필드와 판정 지표만 남긴다 (윤곽선 같은 큰 값은 뺀다)
     assert first["objects"] == [{"box": [0.1, 0.2, 0.2, 0.4], "verdict": "defect", "defect_type": "bite",
-                                 "track_id": 3, "truncated": False}]
+                                 "track_id": 3, "truncated": False, "defect_reasons": ["solidity", "concavity"],
+                                 "circularity": 0.7, "solidity": 0.93, "fill_ratio": 0.9, "concavity": 0.12,
+                                 "mask_score": 0.95}]
     assert first["tracking"]["count_line_x"] == 0.34
+
+
+def test_결과_이미지는_세션_폴더에_프레임_번호로_남는다(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "TRACK_LOG_DIR", str(tmp_path))
+    main.log_image({"session_id": "abc", "frame_id": 12}, b"\xff\xd8jpeg")
+    assert (tmp_path / "abc" / "00012.jpg").read_bytes() == b"\xff\xd8jpeg"

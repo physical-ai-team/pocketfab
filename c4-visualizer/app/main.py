@@ -38,18 +38,29 @@ def now_ms() -> float:
     return time.time() * 1000
 
 
+# 기록에 남기는 과자 필드: 재생에 필요한 것(위치·판정) + 왜 그렇게 판정했는지 볼 지표
+LOG_FIELDS = ("box", "verdict", "defect_type", "track_id", "truncated",
+              "defect_reasons", "circularity", "solidity", "fill_ratio", "concavity", "mask_score")
+
+
 def log_tracking(m: dict):
     """추적 결과를 세션별 JSONL 파일에 한 줄 덧붙인다. 도착한 순서 그대로 남겨야 나중에 똑같이 다시 돌려 볼 수 있다."""
     line = {
         "session_id": m["session_id"],
         "frame_id": m["frame_id"],
         "t": m["timings"]["c1_recv"] / 1000,
-        "objects": [{k: o.get(k) for k in ("box", "verdict", "defect_type", "track_id", "truncated")}
-                    for o in m.get("objects", [])],
+        "objects": [{k: o.get(k) for k in LOG_FIELDS} for o in m.get("objects", [])],
         "tracking": {k: m["tracking"][k] for k in ("count_line_x", "direction", "used_for_tracking", "counted", "totals")},
     }
     with open(Path(TRACK_LOG_DIR) / f"{m['session_id']}.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
+
+
+def log_image(m: dict, jpeg: bytes):
+    """C4가 그린 결과 이미지를 <세션>/<frame_id>.jpg로 남긴다. 판정이 왜 틀렸는지 눈으로 볼 때 쓴다."""
+    folder = Path(TRACK_LOG_DIR) / m["session_id"]
+    folder.mkdir(exist_ok=True)
+    (folder / f"{m['frame_id']:05d}.jpg").write_bytes(jpeg)
 
 
 @asynccontextmanager
@@ -81,6 +92,8 @@ async def render_endpoint(meta: str = Form(...), original: UploadFile = File(...
     if TRACK_LOG_DIR:
         log_tracking(m)  # 한 줄짜리 작은 쓰기라 이벤트 루프에서 바로 해도 된다 (추적과 같은 순서로 남기려는 것)
     image, summary = await run_in_threadpool(render, await original.read(), m)
+    if TRACK_LOG_DIR:
+        await run_in_threadpool(log_image, m, image)
     m["summary"] = summary
     m["timings"]["c4_end"] = now_ms()
 
