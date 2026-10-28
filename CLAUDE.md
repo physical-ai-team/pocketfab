@@ -73,6 +73,29 @@
     Docker 이미지에 넣지 않고 C3에 볼륨 마운트한다 (`SAM2_CHECKPOINT_DIR`). 지원 모델은 tiny, small뿐이다.
   - 테스트 영상·이미지: Google Drive로 공유하고 `data/`에 둔다 (git 제외). 폴더 구조와 파일 이름 규칙은 README의 "데이터 공유" 섹션을 따른다.
 
+## 브랜치·PR 규칙
+
+**main에는 직접 커밋·push하지 않는다** (GitHub 보호 규칙으로 PR로만 합칠 수 있다). 모든 작업은 브랜치에서 하고 PR로 올린다.
+
+- 브랜치 이름: `<type>/<scope>-<요약>` — 영문 소문자, 단어는 `-`로 연결
+  - `type`: `feat`(기능) `fix`(버그) `docs`(문서) `refactor`(동작 변화 없는 정리) `test` `perf`(성능) `chore`(설정·빌드·의존성)
+  - `scope`: `c1` `c2` `c3` `c4` `nginx` `infra`(compose, 여러 서비스 공통) `tools` `sim`(시뮬레이터) — 문서 전반이면 생략 가능
+  - 예: `feat/c1-qr`, `fix/c3-mask`, `perf/c3-threads`, `chore/infra-compose-gpu`, `docs/api-spec`
+- 커밋 메시지: `<type>: <한국어 요약>` (예: `fix: C3 마스크 좌표 정규화 오류 수정`)
+- 순서
+  ```powershell
+  git switch main; git pull
+  git switch -c feat/c3-sam2-segmenter
+  # 작업 → 커밋
+  git push -u origin feat/c3-sam2-segmenter
+  ```
+  push 후 PR을 만든다. 이 PC에는 `gh`가 없으므로 PR 생성 링크
+  `https://github.com/physical-ai-team/pocketfab/compare/main...<브랜치>?expand=1`과 PR 본문을 사용자에게 준다.
+- PR 하나에는 주제 하나만 담는다. 범위가 다른 작업은 브랜치를 나눈다.
+- PR 본문은 `.github/pull_request_template.md` 형식(변경 내용 / 확인 방법 / 스펙 변경 여부)을 따른다.
+- api-spec이나 환경변수를 바꾸는 PR은 영향을 받는 서비스 담당자를 리뷰어로 지정한다.
+- 합치기는 **Squash and merge**로 하고, 합친 브랜치는 삭제한다.
+
 ## 작업 규칙
 
 - 한 서비스의 변경이 다른 서비스에 영향을 주면(API 형식, 환경변수) `docs/api-spec.md`도 함께 수정한다.
