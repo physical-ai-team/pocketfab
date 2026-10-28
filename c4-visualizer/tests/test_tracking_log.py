@@ -31,7 +31,8 @@ def test_추적_기록은_세션별_파일에_한_줄씩_남는다(tmp_path, mon
     assert first["tracking"]["count_line_x"] == 0.34
 
 
-def test_결과_이미지는_세션_폴더에_프레임_번호로_남는다(tmp_path, monkeypatch):
+def test_결과_이미지와_원본은_세션_폴더에_프레임_번호로_남는다(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "TRACK_LOG_DIR", str(tmp_path))
-    main.log_image({"session_id": "abc", "frame_id": 12}, b"\xff\xd8jpeg")
-    assert (tmp_path / "abc" / "00012.jpg").read_bytes() == b"\xff\xd8jpeg"
+    main.log_image({"session_id": "abc", "frame_id": 12}, b"drawn", b"original")
+    assert (tmp_path / "abc" / "00012.jpg").read_bytes() == b"drawn"
+    assert (tmp_path / "abc" / "00012_orig.jpg").read_bytes() == b"original"
