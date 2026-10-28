@@ -367,8 +367,9 @@ CPU에서 처리 fps가 1보다 낮으면 시뮬레이터 속도를 낮춘다.
   "frame_id": 1532,
   "image_b64": "/9j/4AAQSkZJRgABAQ...",
   "summary": { "total": 2, "normal": 1, "defect": 1, "uncertain": 0 },
-  "objects": [ { "box_id": 1, "circularity": 0.581, "solidity": 0.872,
-                 "verdict": "defect", "defect_reasons": ["circularity", "solidity"] } ],
+  "objects": [ { "box_id": 1, "circularity": 0.581, "solidity": 0.872, "fill_ratio": 0.840, "concavity": 0.801,
+                 "verdict": "defect", "defect_reasons": ["circularity", "solidity", "fill_ratio", "concavity"],
+                 "defect_type": "wedge", "track_id": 17, "truncated": false } ],
   "latency_ms": { "total": 812.3, "c2": 6.8, "c3_infer": 731.0, "c4": 4.1 },
   "replica": "c3-inference-2",
   "tracking": { "totals": { "total": 41, "normal": 29, "defect": 12, "uncertain": 0 }, "counted": [], "...": "④와 같음" }
@@ -382,6 +383,10 @@ CPU에서 처리 fps가 1보다 낮으면 시뮬레이터 속도를 낮춘다.
   "replicas": { "ee8b29335cb5": 2, "d570a57d09e3": 2 } }
 ```
 `replicas`는 최근 1초간 복제본별 처리 fps다.
+
+`result`의 `objects[]`는 ④의 `objects[]`에서 대시보드에 필요한 필드만 옮긴 것이다
+(`box`, `polygon`, `area_px` 등 좌표·픽셀 값은 빠진다. 윤곽선은 이미 `image_b64`에 그려져 있다).
+대시보드는 `tracking.counted`의 불량 과자를 `track_id`로 `objects[]`와 맞춰 불량 유형과 썸네일을 "최근 불량" 목록에 남긴다.
 
 ### 5.2 기타 C1 엔드포인트
 | 메서드 | 경로 | 설명 |

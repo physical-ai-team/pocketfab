@@ -6,26 +6,62 @@
   <title>PocketFab 대시보드</title>
   <style>
     body { margin: 0; font-family: system-ui, sans-serif; background: #f4f5f7; color: #222; }
-    header { padding: 12px 16px; background: #1f2937; color: #fff; }
-    main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px; }
-    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+    header { padding: 12px 16px; background: #1f2937; color: #fff; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #conn { font-size: 13px; opacity: .8; }
+    #session { font-size: 13px; opacity: .8; margin-left: auto; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
     .card { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-    #frame { width: 100%; background: #000; border-radius: 6px; min-height: 240px; display: block; }
+    .card + .card { margin-top: 12px; }
     h3 { margin: 0 0 8px; font-size: 15px; }
+    small { color: #666; font-weight: normal; }
+
+    /* 누적 집계: 줌 화면 공유에서도 읽히도록 크게 */
+    #tally { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px; }
+    @media (max-width: 600px) { #tally { grid-template-columns: repeat(2, 1fr); } }
+    .big { background: #fff; border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .big .label { font-size: 13px; color: #555; }
+    .big .value { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .big.defect .value { color: #d33; } .big.normal .value { color: #198754; } .big.uncertain .value { color: #b58900; }
+    .flash { animation: flash 1s; }
+    @keyframes flash { from { background: #ffd6d6; } to { background: #fff; } }
+
+    #frame { width: 100%; background: #000; border-radius: 6px; min-height: 240px; display: block; }
+    #frame-info { font-size: 13px; color: #555; margin-top: 6px; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     td { padding: 3px 0; } td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-    #qr { width: 180px; display: block; margin: 0 auto; }
+    #qr { width: 160px; display: block; margin: 0 auto; }
     #camera-url { font-size: 12px; word-break: break-all; text-align: center; color: #555; }
     .defect { color: #d33; font-weight: 600; } .normal { color: #198754; } .uncertain { color: #b58900; }
-    #conn { font-size: 13px; opacity: .8; margin-left: 8px; }
+    #objects div { padding: 2px 0; }
+    #fps-chart { width: 100%; height: 90px; display: block; }
+
+    #types { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .chip { background: #fdecec; color: #a12; border-radius: 12px; padding: 2px 10px; font-size: 13px; }
+    #recent { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+    #recent figure { margin: 0; font-size: 12px; }
+    #recent img { width: 100%; border-radius: 4px; border: 2px solid #d33; display: block; }
+    .empty { font-size: 13px; color: #888; }
   </style>
 </head>
 <body>
-<header><strong>PocketFab</strong> 실시간 불량 검출 <span id="conn">연결 중…</span></header>
+<header>
+  <strong>PocketFab</strong> 실시간 불량 검출 <span id="conn">연결 중…</span>
+  <span id="session"></span>
+</header>
 <main>
-  <section class="card">
-    <img id="frame" alt="검출 결과가 여기에 표시됩니다">
-    <div id="frame-info" style="font-size:13px;color:#555;margin-top:6px">결과 대기 중</div>
+  <section>
+    <!-- 과자 단위 누적 집계 (C4가 검사선 통과 시 1회 집계, api-spec 4.2) -->
+    <div id="tally"></div>
+    <div class="card">
+      <img id="frame" alt="검출 결과가 여기에 표시됩니다">
+      <div id="frame-info">결과 대기 중</div>
+    </div>
+    <div class="card">
+      <h3>최근 불량 <small>검사선을 넘은 불량 과자, 이 화면을 연 뒤부터</small></h3>
+      <div id="types"></div>
+      <div id="recent"><div class="empty">아직 없음</div></div>
+    </div>
   </section>
   <aside>
     <div class="card">
@@ -33,16 +69,16 @@
       <img id="qr" src="/qr" alt="QR 코드">
       <div id="camera-url"></div>
     </div>
-    <div class="card" style="margin-top:12px">
-      <h3>처리 현황 (최근 1초)</h3>
+    <div class="card">
+      <h3>처리 fps <small>최근 60초, 5초 평균</small></h3>
+      <canvas id="fps-chart"></canvas>
+    </div>
+    <div class="card">
+      <h3>처리 현황 <small>최근 1초</small></h3>
       <table id="stats"></table>
     </div>
-    <div class="card" style="margin-top:12px">
-      <h3>누적 집계 (과자 단위, 검사선 통과 시)</h3>
-      <table id="tally"></table>
-    </div>
-    <div class="card" style="margin-top:12px">
-      <h3>현재 프레임 (프레임 단위)</h3>
+    <div class="card">
+      <h3>현재 프레임 <small>프레임 단위</small></h3>
       <table id="summary"></table>
       <div id="objects" style="font-size:13px;margin-top:6px"></div>
     </div>
@@ -52,6 +88,9 @@
 <script>
 // 스펙: docs/api-spec.md 5.1
 const $ = (id) => document.getElementById(id);
+const RECENT_MAX = 8;        // "최근 불량"에 남길 개수
+const CHART_SECONDS = 60;    // fps 그래프 가로 길이
+const TYPE_NAMES = { bite: "한쪽 파임", cut: "단면 절단", wedge: "조각 결손", half: "반쪽 파손" };
 
 fetch("/v1/config").then(r => r.json()).then(c => { $("camera-url").textContent = c.camera_url; });
 
@@ -59,27 +98,86 @@ function rows(pairs) {
   return pairs.map(([k, v]) => `<tr><td>${k}</td><td>${v ?? "-"}</td></tr>`).join("");
 }
 
-function onTracking(t) {
-  if (!t) return;
-  const c = t.totals;
-  const rate = c.total ? `${(c.defect / c.total * 100).toFixed(1)}%` : "-";
-  $("tally").innerHTML = rows([["검사 통과", c.total], ["정상", c.normal], ["불량", c.defect],
-                               ["판단불가", c.uncertain], ["불량률", rate]]);
+// ── 세션 ───────────────────────────────────────────
+// 카메라가 바뀌면(새 세션) C4 누적 집계가 0부터 다시 시작하므로, 이 화면의 기록도 비운다.
+let currentSession = null;
+let typeCounts = {};
+let recent = [];
+
+function resetSession(id) {
+  currentSession = id;
+  typeCounts = {};
+  recent = [];
+  $("session").textContent = `세션 ${id}`;
+  renderRecent();
 }
 
+// ── 누적 집계 (과자 단위) ───────────────────────────
+let lastDefectTotal = 0;
+
+function onTracking(t) {
+  const c = t?.totals || { total: 0, normal: 0, defect: 0, uncertain: 0 };
+  const rate = c.total ? `${(c.defect / c.total * 100).toFixed(1)}%` : "-";
+  $("tally").innerHTML = [
+    ["", "검사 통과", c.total], ["normal", "정상", c.normal], ["defect", "불량", c.defect],
+    ["uncertain", "판단불가", c.uncertain], ["defect", "불량률", rate],
+  ].map(([cls, label, value]) =>
+    `<div class="big ${cls}"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
+  // 불량이 새로 집계되면 불량 칸을 잠깐 붉게 깜빡인다
+  if (c.defect > lastDefectTotal) $("tally").children[2].classList.add("flash");
+  lastDefectTotal = c.defect;
+}
+
+// ── 최근 불량 ───────────────────────────────────────
+function onCounted(m) {
+  const defects = (m.tracking?.counted || []).filter(c => c.verdict === "defect");
+  for (const c of defects) {
+    // 검사선을 넘은 그 프레임의 objects에서 같은 track_id를 찾아 불량 유형을 가져온다
+    const obj = (m.objects || []).find(o => o.track_id === c.track_id);
+    const type = obj?.defect_type || "unknown";
+    typeCounts[type] = (typeCounts[type] || 0) + 1;
+    recent.unshift({ type, trackId: c.track_id, frameId: m.frame_id, votes: c.votes,
+                     image: m.image_b64, time: new Date().toLocaleTimeString() });
+  }
+  if (defects.length) {
+    recent = recent.slice(0, RECENT_MAX);
+    renderRecent();
+  }
+}
+
+function renderRecent() {
+  $("types").innerHTML = Object.entries(typeCounts)
+    .map(([t, n]) => `<span class="chip">${TYPE_NAMES[t] || "유형 모름"} (${t}) ${n}</span>`).join("");
+  $("recent").innerHTML = recent.length ? recent.map(r =>
+    `<figure><img src="data:image/jpeg;base64,${r.image}" alt="불량 프레임">` +
+    `<figcaption><b class="defect">${TYPE_NAMES[r.type] || r.type}</b> · 과자 #${r.trackId}<br>` +
+    `${r.time} · frame ${r.frameId} · 표 ${r.votes?.defect ?? "-"}:${r.votes?.normal ?? "-"}</figcaption></figure>`).join("")
+    : `<div class="empty">아직 없음</div>`;
+}
+
+// ── 결과 1건 ────────────────────────────────────────
 function onResult(m) {
+  if (m.session_id !== currentSession) resetSession(m.session_id);
   $("frame").src = "data:image/jpeg;base64," + m.image_b64;
   onTracking(m.tracking);
+  onCounted(m);
+
   const l = m.latency_ms || {};
   $("frame-info").textContent =
-    `frame ${m.frame_id} · session ${m.session_id} · replica ${m.replica ?? "-"} · 전체 ${l.total ?? "-"} ms ` +
+    `frame ${m.frame_id} · replica ${m.replica ?? "-"} · 전체 ${l.total ?? "-"} ms ` +
     `(C2 ${l.c2 ?? "-"} / C3 추론 ${l.c3_infer ?? "-"} / C4 ${l.c4 ?? "-"})`;
   const s = m.summary || {};
   $("summary").innerHTML = rows([["전체", s.total], ["정상", s.normal], ["불량", s.defect], ["판단불가", s.uncertain]]);
+  const fmt = (v) => v?.toFixed(3) ?? "-";
   $("objects").innerHTML = (m.objects || []).map(o =>
-    `<div class="${o.verdict}">#${o.box_id} ${o.verdict} · C=${o.circularity?.toFixed(3)} · S=${o.solidity?.toFixed(3)} · F=${o.fill_ratio?.toFixed(3)}` +
-    `${o.defect_reasons?.length ? " (" + o.defect_reasons.join(", ") + ")" : ""}</div>`).join("");
+    `<div class="${o.verdict}">${o.truncated ? "화면 끝(집계 제외)" : "과자 #" + (o.track_id ?? "-")} · ${o.verdict}` +
+    `${o.defect_type ? " · " + (TYPE_NAMES[o.defect_type] || o.defect_type) : ""}<br>` +
+    `<span style="color:#555;font-weight:normal">C=${fmt(o.circularity)} S=${fmt(o.solidity)} ` +
+    `F=${fmt(o.fill_ratio)} D=${fmt(o.concavity)}</span></div>`).join("");
 }
+
+// ── 처리 현황 + fps 그래프 ──────────────────────────
+const fpsHistory = [];   // 1초마다 받은 processed_fps
 
 function onStats(s) {
   const reps = Object.entries(s.replicas || {}).map(([k, v]) => [`└ ${k}`, `${v} fps`]);
@@ -88,8 +186,41 @@ function onStats(s) {
     ["드롭률", `${(s.drop_rate * 100).toFixed(0)}%`], ["처리 중 / 한도", `${s.in_flight} / ${s.max_in_flight}`],
     ["C3 복제본", s.c3_replicas], ...reps,
   ]);
+  fpsHistory.push(s.processed_fps);
+  if (fpsHistory.length > CHART_SECONDS + 5) fpsHistory.shift();
+  drawChart();
 }
 
+function drawChart() {
+  // CPU에서는 처리 fps가 1 안팎이라 1초 값은 0과 1을 오간다. 5초 평균으로 부드럽게 그린다.
+  const avg = fpsHistory.map((_, i) => {
+    const win = fpsHistory.slice(Math.max(0, i - 4), i + 1);
+    return win.reduce((a, b) => a + b, 0) / win.length;
+  }).slice(-CHART_SECONDS);
+
+  const canvas = $("fps-chart");
+  const w = canvas.width = canvas.clientWidth * devicePixelRatio;
+  const h = canvas.height = canvas.clientHeight * devicePixelRatio;
+  const g = canvas.getContext("2d");
+  const max = Math.max(1, ...avg) * 1.2;
+  const x = (i) => (i + CHART_SECONDS - avg.length) / (CHART_SECONDS - 1) * w;
+  const y = (v) => h - v / max * h;
+
+  g.strokeStyle = "#e5e7eb"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, y(max / 1.2)); g.lineTo(w, y(max / 1.2)); g.stroke();
+  g.fillStyle = "#888"; g.font = `${11 * devicePixelRatio}px system-ui`;
+  g.fillText(`${(max / 1.2).toFixed(1)} fps`, 4, y(max / 1.2) + 12 * devicePixelRatio);
+
+  if (avg.length < 2) return;
+  g.strokeStyle = "#2d7ff9"; g.lineWidth = 2 * devicePixelRatio;
+  g.beginPath();
+  avg.forEach((v, i) => (i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v))));
+  g.stroke();
+  g.fillStyle = "#2d7ff9";
+  g.fillText(`${avg.at(-1).toFixed(2)} fps`, w - 60 * devicePixelRatio, 14 * devicePixelRatio);
+}
+
+// ── 연결 ────────────────────────────────────────────
 function connect() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/dashboard`);
   ws.onopen = () => { $("conn").textContent = "● 연결됨"; };
@@ -100,6 +231,7 @@ function connect() {
   };
   ws.onclose = () => { $("conn").textContent = "○ 연결 끊김, 재연결 중…"; setTimeout(connect, 1000); };
 }
+onTracking(null);
 connect();
 </script>
 </body>
