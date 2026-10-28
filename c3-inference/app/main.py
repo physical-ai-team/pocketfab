@@ -47,9 +47,10 @@ def load_segmenter():
     if SEGMENTER == "opencv":
         return opencv_segmenter.segment
     if SEGMENTER == "sam2":
-        # TODO(박민성): app/sam2_segmenter.py를 만들고 여기서 import한다.
         # torch는 이 분기 안에서만 import해야 opencv 모드가 torch 없이 돈다.
-        raise RuntimeError("SEGMENTER=sam2는 아직 구현되지 않았습니다. SEGMENTER=opencv를 쓰세요.")
+        from app import sam2_segmenter
+        sam2_segmenter.load()  # 모델을 미리 불러와 첫 요청이 느려지지 않게 한다
+        return sam2_segmenter.segment
     raise RuntimeError(f"알 수 없는 SEGMENTER: {SEGMENTER}")
 
 
