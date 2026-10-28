@@ -13,6 +13,8 @@
   1. 줄별 집계: 한 줄이 통째로 적게 세졌으면 그 줄이 화면 위·아래 끝에 걸린 것(구도 문제)인지 본다.
   2. 못 센 추적: 선을 넘기 "전에 사라짐"이 많으면 추적이 끊긴 것, "넘은 뒤에 처음 잡힘"이 많으면
      앞 프레임에서 C2가 과자를 놓쳤거나 두 프레임 사이에 너무 많이 움직인 것(속도를 낮춘다).
+  4. 줄별 판정 사유: 한 줄만 불량 비율이 크게 높으면 그 줄이 촬영(기울기·반사) 때문에 오판되는 것이다.
+     data/tracking/<세션>/<frame_id>.jpg 결과 이미지로 직접 확인한다.
 """
 
 import argparse
@@ -122,6 +124,32 @@ def report(frames: list[dict], edge_margin: float):
         ties = sum(c["votes"]["normal"] == c["votes"]["defect"] for c in counted.values())
         print(f"\n[3] 집계된 과자 {len(votes)}개: 표 수 중간값 {statistics.median(votes)}, "
               f"최소 {min(votes)}, 동점(→불량) {ties}개")
+
+    # 4. 줄별 판정 사유 (기록에 지표가 있을 때). 시뮬레이터는 줄과 상관없이 불량을 섞으므로
+    #    한 줄만 불량 비율이 크게 높으면 그 줄이 촬영 때문에 체계적으로 오판되는 것이다
+    if rows and any("defect_reasons" in o for f in frames for o in f["objects"]):
+        print("\n[4] 줄별 판정 사유 (화면 끝 과자 제외, 사진 단위)")
+        stats = defaultdict(lambda: {"n": 0, "defect": 0, "reasons": defaultdict(int), "conc": [], "fill": []})
+        for f in frames:
+            for o in f["objects"]:
+                if o["truncated"] or o.get("concavity") is None:
+                    continue
+                s = stats[nearest_row(rows, center(o["box"])[1])]
+                s["n"] += 1
+                s["defect"] += o["verdict"] == "defect"
+                for r in o.get("defect_reasons") or []:
+                    s["reasons"][r] += 1
+                s["conc"].append(o["concavity"])
+                s["fill"].append(o["fill_ratio"])
+        for i, s in sorted(stats.items()):
+            print(f"  줄 {i + 1} (y≈{rows[i]:.2f}): 불량 비율 {s['defect'] / s['n']:.0%} ({s['n']}건), "
+                  f"사유 {dict(s['reasons'])}, 오목 깊이 중간값 {statistics.median(s['conc']):.3f}, "
+                  f"원 채움률 중간값 {statistics.median(s['fill']):.3f}")
+        print(f"  결과 이미지: {path_of_images(frames)}")
+
+
+def path_of_images(frames: list[dict]) -> Path:
+    return ROOT / "data" / "tracking" / frames[0]["session_id"]
 
 
 def replay(frames: list[dict], args):
