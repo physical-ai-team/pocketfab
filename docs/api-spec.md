@@ -308,7 +308,8 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
     "count_line_x": 0.34,
     "direction": "left",
     "used_for_tracking": true,
-    "counted": [ { "track_id": 17, "verdict": "defect", "votes": { "normal": 1, "defect": 4, "uncertain": 0 } } ],
+    "counted": [ { "track_id": 17, "verdict": "defect", "votes": { "normal": 1, "defect": 4, "uncertain": 0 },
+                   "defect_type": "bite" } ],
     "totals": { "total": 41, "normal": 29, "defect": 12, "uncertain": 0 },
     "active_tracks": 9
   }
@@ -318,7 +319,7 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
 | 필드 | 설명 |
 |---|---|
 | `summary` | **이 프레임에** 보이는 과자의 판정 개수 (프레임 단위) |
-| `tracking.counted` | **이 프레임에서** 검사선을 넘은 과자. `verdict`는 다수결 결과, `votes`는 그 과자가 받은 프레임별 판정 수 |
+| `tracking.counted` | **이 프레임에서** 검사선을 넘은 과자. `verdict`는 다수결 결과, `votes`는 그 과자가 받은 프레임별 판정 수, `defect_type`은 불량 판정 프레임들에서 가장 많이 나온 유형 (`verdict`가 `defect`가 아니면 `null`) |
 | `tracking.totals` | 세션 시작 이후 **과자 단위** 누적 집계. 대시보드의 "누적 집계"와 시연 결과는 이 값을 쓴다 |
 | `tracking.used_for_tracking` | `false`면 늦게 도착한 프레임이라 추적에 쓰지 않았다는 뜻 (그림만 그림) |
 | `objects[].track_id` | 추적 번호. 화면 끝에 걸친 과자는 `null` |
@@ -386,7 +387,8 @@ CPU에서 처리 fps가 1보다 낮으면 시뮬레이터 속도를 낮춘다.
 
 `result`의 `objects[]`는 ④의 `objects[]`에서 대시보드에 필요한 필드만 옮긴 것이다
 (`box`, `polygon`, `area_px` 등 좌표·픽셀 값은 빠진다. 윤곽선은 이미 `image_b64`에 그려져 있다).
-대시보드는 `tracking.counted`의 불량 과자를 `track_id`로 `objects[]`와 맞춰 불량 유형과 썸네일을 "최근 불량" 목록에 남긴다.
+대시보드는 `tracking.counted`의 불량 과자를 "최근 불량" 목록에 썸네일과 함께 남긴다. 불량 유형은 `counted[].defect_type`(C4 다수결)을 쓴다.
+검사선을 넘은 그 프레임 하나의 판정은 정상일 수 있어서, `objects[]`에서 유형을 찾으면 "unknown"이 나오기 때문이다.
 
 ### 5.2 기타 C1 엔드포인트
 | 메서드 | 경로 | 설명 |

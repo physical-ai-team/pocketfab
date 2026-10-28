@@ -119,5 +119,5 @@ def draw_tracking(img, meta: dict):
                           COLORS[verdict_of[o["track_id"]]], 3, cv2.LINE_AA)
 
     for i, c in enumerate(counted):
-        put_text(img, f"+1 {c['verdict'].upper()}", (line_x + 6, 70 + 22 * i),
+        put_text(img, f"+1 {c['verdict'].upper()} {c.get('defect_type') or ''}".rstrip(), (line_x + 6, 70 + 22 * i),
                  COLORS[c["verdict"]], 0.6)
