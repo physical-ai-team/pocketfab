@@ -26,7 +26,8 @@
     .flash { animation: flash 1s; }
     @keyframes flash { from { background: #ffd6d6; } to { background: #fff; } }
 
-    #frame { width: 100%; background: #000; border-radius: 6px; min-height: 240px; display: block; }
+    /* 결과 이미지는 640px이라 넓은 모니터에서 폭에 맞춰 늘리면 너무 커진다. 화면 높이의 60%까지만, 비율은 유지 */
+    #frame { width: 100%; max-height: 60vh; object-fit: contain; background: #000; border-radius: 6px; min-height: 240px; display: block; }
     #frame-info { font-size: 13px; color: #555; margin-top: 6px; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     td { padding: 3px 0; } td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
