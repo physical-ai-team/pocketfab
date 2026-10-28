@@ -36,13 +36,13 @@
 
 | 유형 | 모양 | 잡는 지표 |
 |---|---|---|
-| `bite` 한쪽 파임 | 가장자리가 원형으로 파임 (오목) | solidity, 원 채움률 (결손이 작으면 셋 다 약함) |
+| `bite` 한쪽 파임 | 가장자리가 원형으로 파임 (오목) | **오목 깊이** (작은 결손은 다른 세 지표로 못 잡음) |
 | `cut` 단면 절단 | 직선으로 잘림 (볼록) | **원 채움률** (원형도·solidity는 정상과 겹침) |
 | `wedge` 조각 결손 | 중심까지 부채꼴로 빠짐 (오목) | 세 지표 모두 |
 | `half` 반쪽 파손 | 반원 (볼록) | 원형도, 원 채움률 |
 
 - 정상 쿠키는 원형도 약 0.90(픽셀 외곽 때문에 1.0이 아님), solidity 0.99, 원 채움률 0.97이다.
-  현재 기본 임계값(0.80 / 0.95 / 0.94)은 이상적 마스크로 정한 임시값이다. 결손 25%의 `bite`는 아직 잘 못 잡는다.
+  현재 기본 임계값(0.80 / 0.95 / 0.94 / 오목 깊이 0.06)은 이상적 마스크로 정했고, 시뮬레이터 4조건 채점에서 불량 Recall 1.000이다 (api-spec 7.3).
 - 라벨 JSON은 COCO와 비슷하다 (`bbox` = `[x, y, w, h]` 픽셀, `segmentation` = 180점 폴리곤 픽셀, 좌표는 저장된 PNG 픽셀 기준).
   `category`는 `round`/`deformed`, `defect_type`은 위 4종이다. 형식 분석은 performance-plan 7.1에 있다.
 - 화면 양 끝에는 일부만 보이는 과자가 항상 있다. 정상 과자가 잘려 보여 불량으로 판정되므로 판정·평가에서 빼야 한다 (api-spec 7.4).
@@ -71,9 +71,9 @@
 - **SAM 2는 자동 분할을 쓰지 않고 박스 프롬프트(`SAM2ImagePredictor`)를 쓴다.** 박스는 C2가 OpenCV로 검출한다.
   `boxes`가 비어 있으면 C3 호출을 건너뛴다.
 - **판정**: `mask_score < MASK_SCORE_MIN`이면 `uncertain`, 아니면 원형도(`CIRCULARITY_THRESHOLD`),
-  solidity(`SOLIDITY_THRESHOLD`), 원 채움률(`FILL_RATIO_THRESHOLD`) 중 **하나라도** 임계값 미만이면 `defect`이고
-  벗어난 지표를 `defect_reasons`에 기록한다. 규칙의 기준은 api-spec 4.1, 구현은 `c3-inference/app/judge.py`의 `thresholds()`.
-  지표를 추가할 때는 `measure()`와 `thresholds()`만 고치면 판정·`defect_reasons`에 자동으로 반영된다.
+  solidity(`SOLIDITY_THRESHOLD`), 원 채움률(`FILL_RATIO_THRESHOLD`) 중 **하나라도** 임계값 미만이거나
+  오목 깊이가 `CONCAVITY_THRESHOLD`를 넘으면 `defect`이고 벗어난 지표를 `defect_reasons`에, 추정 유형을 `defect_type`에 기록한다. 규칙의 기준은 api-spec 4.1, 구현은 `c3-inference/app/judge.py`의 `thresholds()`.
+  지표를 추가할 때는 `measure()`와 `thresholds()`(작으면 불량) 또는 `upper_limits()`(크면 불량)만 고치면 판정·`defect_reasons`에 자동으로 반영된다.
 - C3의 `app/sam2_segmenter.py`는 박민성 담당이다. 판정 로직을 바꿀 때 이 파일은 건드리지 않는다.
 - **`SEGMENTER=sam2|opencv`**: opencv 모드는 SAM 2 대신 OpenCV 윤곽선을 쓰는 기준선이다. 출력 형식과 판정 규칙은 같고,
   torch를 import하지 않아야 한다. 따라서 C3에서 torch/SAM 2 import는 sam2 모드 경로 안에서만 한다.

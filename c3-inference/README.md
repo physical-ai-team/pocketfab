@@ -25,3 +25,12 @@ C2가 준 박스를 프롬프트로 SAM 2 마스크를 뽑고, 원형도·solidi
 cd c3-inference
 pytest
 ```
+
+## 판정 정확도 채점
+시뮬레이터 프레임(`frame_*.png`)과 정답 라벨(`frame_*.json`)이 있는 폴더로 C3 판정을 채점한다 (레포 루트에서).
+```powershell
+python tools/c3_eval.py data/sim/base                     # OpenCV 모드
+python tools/c3_eval.py data/sim/base --segmenter sam2    # SAM 2 모드 (checkpoints/ 필요)
+python tools/c3_eval.py data/sim/base --masks gt          # 정답 폴리곤으로 판정 규칙만
+```
+결과와 임계값 근거: [api-spec 7.3](../docs/api-spec.md)
