@@ -1,0 +1,44 @@
+"""판정 결과를 원본 프레임 위에 그린다. 지금은 텍스트만 표시한다.
+
+TODO(김세광): objects[].polygon으로 윤곽선 그리기 (불량 빨강 / 정상 초록 / 판단불가 노랑).
+"""
+
+import cv2
+import numpy as np
+
+COLORS = {"normal": (80, 200, 80), "defect": (60, 60, 230), "uncertain": (0, 200, 230)}  # BGR
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+
+
+def put_text(img, text, org, color, scale=0.5):
+    # 어떤 배경에서도 보이도록 검은 테두리를 먼저 그린다
+    cv2.putText(img, text, org, FONT, scale, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(img, text, org, FONT, scale, color, 1, cv2.LINE_AA)
+
+
+def summarize(objects: list[dict]) -> dict:
+    s = {"total": len(objects), "normal": 0, "defect": 0, "uncertain": 0}
+    for o in objects:
+        s[o["verdict"]] += 1
+    return s
+
+
+def render(jpeg: bytes, meta: dict) -> tuple[bytes, dict]:
+    """원본 JPEG + meta → (마킹된 JPEG, summary)."""
+    img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+    h, w = img.shape[:2]
+    objects = meta.get("objects", [])
+    summary = summarize(objects)
+    replica = (meta.get("inference") or {}).get("replica") or "-"
+
+    put_text(img, f"frame {meta['frame_id']}  replica {replica}", (8, 20), (255, 255, 255))
+    put_text(img, f"objects {summary['total']}  normal {summary['normal']}  "
+                  f"defect {summary['defect']}  uncertain {summary['uncertain']}", (8, 42), (255, 255, 255))
+
+    for o in objects:
+        x1, y1 = o["box"][0] * w, o["box"][1] * h
+        label = f"#{o['box_id']} {o['verdict'].upper()} C={o['circularity']:.2f} S={o['solidity']:.2f}"
+        put_text(img, label, (int(x1), max(int(y1) - 6, 60)), COLORS[o["verdict"]])
+
+    ok, out = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    return out.tobytes(), summary

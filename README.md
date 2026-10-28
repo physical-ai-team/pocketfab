@@ -3,7 +3,8 @@
 스마트폰 카메라 하나로 컨베이어 위 과자의 불량(깨짐, 형태 변형)을 **실시간 영상(30fps 입력)** 에서 검출하는 시스템입니다.
 SAM 2로 과자 마스크를 추출하고, OpenCV로 원형도를 계산해 정상/불량을 판정한 뒤, 결과를 웹 대시보드에 표시합니다.
 
-> 현재 상태: **설계 단계**. 문서와 폴더 구조만 있고 코드는 아직 없습니다.
+> 현재 상태: **뼈대 파이프라인 완성**. 폰 카메라 → C1 → C2 → C3 → C4 → 대시보드까지 프레임이 흐릅니다.
+> C2 전처리·박스 검출, C3 SAM 2 추론, C4 윤곽선 그리기는 각 담당자가 채울 차례입니다 (각 폴더의 README 참고).
 
 ## 주요 특징
 
@@ -79,18 +80,22 @@ pocketfab/
 │   └── performance-plan.md  # 성능 측정 계획
 ├── scripts/
 │   └── download_checkpoints.py  # SAM 2 체크포인트 다운로드
+├── tools/
+│   └── fake_camera.py   # 폰 대신 프레임을 보내는 가짜 카메라 (테스트·부하 측정)
 ├── checkpoints/         # SAM 2 체크포인트 (git 제외, 스크립트로 받음)
 ├── data/                # 테스트 영상·이미지 (git 제외, Google Drive로 공유)
+├── docker-compose.yml
+├── .env.example         # 설정 예시 (.env로 복사해서 사용)
 ├── environment.yml      # 로컬 개발용 conda 환경
 ├── CLAUDE.md
 └── README.md
 ```
 
-각 서비스 폴더는 앞으로 `app/`(소스), `Dockerfile`, `requirements.txt`, `README.md`로 구성합니다.
+각 서비스 폴더는 `app/`(소스), `Dockerfile`, `requirements.txt`, `README.md`(담당자가 어디부터 채우면 되는지)로 구성됩니다.
 
 ## 실행 방법
 
-> 코드 작성 후 채워 넣을 예정입니다. 아래는 예정된 절차입니다.
+준비물: Docker Desktop, conda. 명령은 모두 레포 루트의 PowerShell에서 실행합니다.
 
 ### 1. 로컬 개발 환경 (conda)
 
@@ -119,26 +124,62 @@ python scripts/download_checkpoints.py --force small   # 다시 받기
 - 이미 받은 파일은 크기를 비교해서 건너뜁니다. 다운로드가 중간에 끊기면 `.part` 파일만 남으니 다시 실행하면 됩니다.
 - C3 컨테이너는 이 폴더를 볼륨으로 마운트해서 사용할 예정입니다 (`SAM2_CHECKPOINT_DIR`).
 
-### 3. 전체 시스템 실행 (Docker)
+> 지금은 `SEGMENTER=opencv`라서 체크포인트 없이도 실행됩니다.
+
+### 3. 설정 파일 만들기 (최초 1회)
 
 ```powershell
-# (예정) PC의 LAN IP 확인 후 설정 — QR코드에 들어갑니다
-$env:PUBLIC_HOST = "192.168.0.10"
+Copy-Item .env.example .env
+# PC의 LAN IP 확인 (Wi-Fi 어댑터의 IPv4 주소)
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -match 'Wi-Fi' | Select-Object IPAddress
+```
+`.env`를 열어 `PUBLIC_HOST`를 위 IP로 바꿉니다. 이 IP가 QR코드와 HTTPS 인증서에 들어갑니다.
+(PC에서만 시험할 때는 `.env` 없이 실행해도 되며, 이때는 `localhost`로 동작합니다.)
 
-# (예정) C3를 3개로 복제해서 실행
-docker compose up --build --scale c3-inference=3
+### 4. 전체 시스템 실행 (Docker)
+
+```powershell
+docker compose up -d --build --scale c3-inference=2   # C3를 2개로 복제
+docker compose ps                                     # 6개 컨테이너가 Up인지 확인
+docker compose logs -f c3-inference                   # 특정 서비스 로그 보기
+docker compose up -d --scale c3-inference=4           # 실행 중에 복제본 수 변경
+docker compose down                                   # 종료
 ```
 
-### 4. 접속
+`.env`를 바꾼 뒤에는 `docker compose up -d`를 다시 실행하면 바뀐 서비스만 재시작됩니다.
 
+### 5. 접속
+
+**폰 없이 확인하기**
+```powershell
+conda activate pocketfab
+python tools/fake_camera.py --seconds 20
+```
+PC 브라우저에서 `https://localhost/`을 열면 합성 영상(`fake N`)이 대시보드에 흘러갑니다.
+`https://localhost/v1/metrics`에서 누적 통계(처리 수, 드롭 이유, 복제본별 처리 수)를 볼 수 있습니다.
+
+**스마트폰으로 접속하기**
 1. PC 브라우저에서 `https://<PUBLIC_HOST>/` 대시보드를 열고 QR코드를 확인합니다.
 2. 같은 Wi-Fi에 연결된 스마트폰으로 QR을 찍습니다.
-3. 자체 서명 인증서 경고가 뜨면 "계속 진행"을 누릅니다. 브라우저는 HTTPS에서만 카메라를 허용합니다.
-4. 카메라 권한을 허용하면 스트리밍이 시작되고, 대시보드에 검출 결과가 표시됩니다.
+3. 자체 서명 인증서 경고가 뜨면 "고급 → 계속 진행"을 누릅니다. 브라우저는 HTTPS에서만 카메라를 허용합니다.
+4. "스트리밍 시작"을 누르고 카메라 권한을 허용하면 대시보드에 결과가 표시됩니다.
 
-> Windows 방화벽에서 443 포트 인바운드를 허용해야 스마트폰에서 접속할 수 있습니다.
+> 폰에서 접속이 안 되면 Windows 방화벽에서 443 포트 인바운드를 허용합니다 (관리자 PowerShell):
+> `New-NetFirewallRule -DisplayName "PocketFab HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443 -Action Allow`
 
-### 5. GPU 환경으로 전환 (예정)
+### 6. 주요 설정 (`.env`)
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `PUBLIC_HOST` | `localhost` | 폰이 접속할 PC의 LAN IP |
+| `MAX_IN_FLIGHT` | `4` | 동시에 처리 중일 수 있는 프레임 수. C3 복제본 수와 비슷하게 맞춤 |
+| `SEGMENTER` | `opencv` | `opencv` / `sam2`(구현 예정) |
+| `SKIP_C3_IF_NO_BOXES` | `false` | C2 박스 검출 구현 후 `true`로 변경 |
+| `SIMULATED_INFER_MS` | `0` | C3 추론 시간을 흉내 내는 지연. 로드밸런싱 시험용 |
+
+전체 목록은 [docs/api-spec.md](docs/api-spec.md) 6장을 참고하세요.
+
+### 7. GPU 환경으로 전환 (예정)
 
 ```powershell
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PocketFab 카메라</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #111; color: #eee; }
+    main { max-width: 640px; margin: 0 auto; padding: 16px; }
+    video { width: 100%; background: #000; border-radius: 8px; }
+    .row { display: flex; gap: 8px; margin: 12px 0; align-items: center; flex-wrap: wrap; }
+    button { font-size: 18px; padding: 12px 20px; border: 0; border-radius: 8px; background: #2d7ff9; color: #fff; }
+    button.stop { background: #d33; }
+    select { font-size: 16px; padding: 8px; }
+    #status { font-size: 14px; color: #aaa; white-space: pre-line; }
+    .error { color: #ff6b6b !important; }
+  </style>
+</head>
+<body>
+<main>
+  <h2>PocketFab 카메라</h2>
+  <video id="video" autoplay playsinline muted></video>
+  <div class="row">
+    <button id="toggle">스트리밍 시작</button>
+    <label>FPS
+      <select id="fps"><option>5</option><option>10</option><option>15</option><option selected>30</option></select>
+    </label>
+  </div>
+  <div id="status">대기 중</div>
+</main>
+<canvas id="canvas" hidden></canvas>
+
+<script>
+// 스펙: docs/api-spec.md 3.1 — JPEG 1장 = 바이너리 메시지 1개
+const WIDTH = 640;
+const JPEG_QUALITY = 0.7;
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const btn = document.getElementById("toggle");
+const statusEl = document.getElementById("status");
+
+let ws = null, stream = null, timer = null;
+
+function setStatus(text, isError = false) {
+  statusEl.textContent = text;
+  statusEl.classList.toggle("error", isError);
+}
+
+async function start() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatus("이 브라우저에서는 카메라를 쓸 수 없습니다.\nhttps:// 주소로 접속했는지 확인하세요.", true);
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+  } catch (e) {
+    setStatus("카메라 권한을 얻지 못했습니다: " + e.message, true);
+    return;
+  }
+  video.srcObject = stream;
+  await video.play();
+
+  // 종횡비를 유지한 채 가로 WIDTH로 맞춘다
+  canvas.width = WIDTH;
+  canvas.height = Math.round(WIDTH * video.videoHeight / video.videoWidth);
+
+  ws = new WebSocket(`wss://${location.host}/ws/camera`);
+  ws.onopen = () => {
+    const fps = Number(document.getElementById("fps").value);
+    ws.send(JSON.stringify({ type: "hello", device: navigator.userAgent,
+                             width: canvas.width, height: canvas.height, fps }));
+    timer = setInterval(sendFrame, 1000 / fps);
+    setStatus("연결됨");
+  };
+  ws.onmessage = (ev) => {
+    const s = JSON.parse(ev.data);
+    if (s.type === "stats") {
+      setStatus(`세션 ${s.session_id}\n보냄 ${s.sent} · 수락 ${s.accepted} · 버림 ${s.dropped}\n처리 ${s.processed_fps} fps`);
+    }
+  };
+  ws.onclose = () => { if (timer) stop("서버 연결이 끊겼습니다.", true); };
+  ws.onerror = () => setStatus("WebSocket 오류", true);
+
+  btn.textContent = "중지";
+  btn.classList.add("stop");
+}
+
+function sendFrame() {
+  // 네트워크가 밀리면 쌓아두지 않고 이번 프레임은 건너뛴다
+  if (!ws || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > 0) return;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob((blob) => { if (blob && ws?.readyState === WebSocket.OPEN) ws.send(blob); },
+                "image/jpeg", JPEG_QUALITY);
+}
+
+function stop(message = "중지됨", isError = false) {
+  clearInterval(timer); timer = null;
+  ws?.close(); ws = null;
+  stream?.getTracks().forEach(t => t.stop()); stream = null;
+  btn.textContent = "스트리밍 시작";
+  btn.classList.remove("stop");
+  setStatus(message, isError);
+}
+
+btn.onclick = () => (ws ? stop() : start());
+</script>
+</body>
+</html>

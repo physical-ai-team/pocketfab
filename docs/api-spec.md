@@ -116,7 +116,7 @@ C1 ◀──①응답── C2 ◀──②응답── C3 ◀──③응답─
 | `processed` | C4까지 정상 처리되어 결과가 C1으로 전송됨 |
 | `dropped` | 중간에 버려짐. `stage`에 버린 단계, `drop_reason`에 이유 |
 
-`drop_reason` 값: `c3_busy`(모든 C3 복제본이 바쁨), `timeout`, `decode_error`, `upstream_error`.
+`drop_reason` 값: `c1_busy`(in-flight가 `MAX_IN_FLIGHT`에 도달), `c3_busy`(모든 C3 복제본이 바쁨), `timeout`, `decode_error`, `upstream_error`.
 
 ### 2.5 HTTP 상태 코드
 | 코드 | 상황 |
@@ -192,8 +192,9 @@ C2가 수행하는 작업: 리사이즈 → 노이즈 제거 → 밝기 보정 �
 | `preprocess` | 적용한 전처리 기록 (디버깅·실험 기록용, 자유 형식) |
 | `boxes` | 과자 후보 박스 목록. **반드시 포함하고, 없으면 빈 배열 `[]`** |
 
-**`boxes`가 빈 배열이면 C2는 C3를 호출하지 않고 바로 C4로 보낸다**(아래 ③과 같은 형식, `objects: []`).
-컨베이어에 과자가 없는 프레임에서 SAM 2 추론을 통째로 생략하기 위해서다.
+**`boxes`가 빈 배열이고 `SKIP_C3_IF_NO_BOXES=true`이면 C2는 C3를 호출하지 않고 바로 C4로 보낸다**
+(아래 ③과 같은 형식, `inference: null`, `objects: []`). 컨베이어에 과자가 없는 프레임에서 SAM 2 추론을 통째로 생략하기 위해서다.
+박스 검출을 구현하기 전(뼈대 단계)에는 `false`로 두어 모든 프레임이 C3를 거치게 한다.
 
 응답: 공통 응답. Nginx가 503을 반환하면 C2는 해당 프레임을 `dropped`(`c3_busy`)로 응답한다 (재시도하지 않음).
 
@@ -249,7 +250,7 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
 
 | 필드 | 설명 |
 |---|---|
-| `inference.replica` | 처리한 C3 컨테이너의 hostname. **로드밸런싱 분포 확인용** |
+| `inference.replica` | 처리한 C3 컨테이너의 hostname (Docker에서는 컨테이너 ID 앞 12자리, 예: `ee8b29335cb5`). **로드밸런싱 분포 확인용** |
 | `inference.segmenter` | `sam2` 또는 `opencv` (비교용 기준선 모드, 5.2 참고) |
 | `objects[].polygon` | 마스크 외곽선을 `cv2.approxPolyDP`로 단순화한 정규화 좌표 (최대 64점) |
 | `objects[].area_px`, `perimeter_px` | `proc_size` 기준 픽셀 단위 |
@@ -325,6 +326,7 @@ C1은 `frame_id`가 해당 세션에서 마지막으로 표시한 번호보다 �
 | GET | `/` | 대시보드 페이지 |
 | GET | `/camera` | 스마트폰 카메라 페이지 |
 | GET | `/qr` | `https://<PUBLIC_HOST>/camera`를 담은 QR 이미지 (PNG) |
+| GET | `/v1/config` | 대시보드용 설정 (`camera_url`, `max_in_flight`) |
 | GET | `/v1/metrics` | 누적 통계 JSON (성능 측정 스크립트가 수집) |
 
 ---
@@ -341,6 +343,7 @@ CPU/GPU 전환과 튜닝 값은 **코드에 하드코딩하지 않고 환경변�
 | `PREPROC_WIDTH` | C2 | `640` | 리사이즈 가로 픽셀 (종횡비 유지) |
 | `BOX_MIN_AREA_RATIO` | C2 | `0.005` | 이보다 작은 후보는 노이즈로 보고 제외 |
 | `MAX_BOXES` | C2 | `16` | 프레임당 최대 박스 수 |
+| `SKIP_C3_IF_NO_BOXES` | C2 | `false` | 박스가 없으면 C3를 건너뜀. 박스 검출 구현 후 `true`로 |
 | `DEVICE` | C3 | `cpu` | `cpu` / `cuda` |
 | `SEGMENTER` | C3 | `sam2` | `sam2` / `opencv` (SAM 2 없이 C2 박스 영역의 OpenCV 윤곽선만 사용) |
 | `SAM2_MODEL` | C3 | `sam2.1_hiera_tiny` | `sam2.1_hiera_tiny` / `sam2.1_hiera_small` (`scripts/download_checkpoints.py`로 받을 수 있는 것) |
@@ -349,6 +352,7 @@ CPU/GPU 전환과 튜닝 값은 **코드에 하드코딩하지 않고 환경변�
 | `CIRCULARITY_THRESHOLD` | C3 | `0.80` | 원형도가 이 값 미만이면 `defect`. 테스트 데이터로 보정 필요 |
 | `SOLIDITY_THRESHOLD` | C3 | `0.95` | solidity가 이 값 미만이면 `defect`. 테스트 데이터로 보정 필요 |
 | `MASK_SCORE_MIN` | C3 | `0.5` | 이 값 미만이면 `uncertain` (sam2 모드만 해당) |
+| `SIMULATED_INFER_MS` | C3 | `0` | 추론 시간을 흉내 내는 지연(ms). CPU는 쓰지 않으므로 로드밸런싱·백프레셔 시험 전용 |
 
 GPU 전환 계획: C3 Dockerfile에 빌드 인자 `TORCH_VARIANT=cpu|cu124`를 두고,
 `docker-compose.gpu.yml` 오버라이드에서 `DEVICE=cuda`와 GPU 예약(`deploy.resources.reservations.devices`)을

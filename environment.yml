@@ -22,7 +22,8 @@ dependencies:
       - opencv-python-headless
       # C1
       - qrcode[pil]
-      # 테스트 / 성능 측정
+      # 테스트 / 성능 측정 (tools/fake_camera.py)
+      - websockets
       - pytest
       - pytest-asyncio
       # C3 (SAM 2) 의존성은 용량이 커서 C3 개발을 시작할 때 추가한다.

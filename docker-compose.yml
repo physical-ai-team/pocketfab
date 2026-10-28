@@ -1,0 +1,56 @@
+# 실행: docker compose up --build --scale c3-inference=2
+# 설정: 루트의 .env 파일 (.env.example 참고)
+
+services:
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs   # 인증서를 유지해야 폰에서 매번 경고를 다시 수락하지 않는다
+    depends_on:
+      - c1-gateway
+      - c3-inference
+
+  c1-gateway:
+    build: ./c1-gateway
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+      MAX_IN_FLIGHT: ${MAX_IN_FLIGHT:-4}
+      C1_PIPELINE_TIMEOUT_S: ${C1_PIPELINE_TIMEOUT_S:-10}
+      C2_URL: http://c2-preprocessing:8000/v1/frames
+
+  c2-preprocessing:
+    build: ./c2-preprocessing
+    environment:
+      PREPROC_WIDTH: ${PREPROC_WIDTH:-640}
+      SKIP_C3_IF_NO_BOXES: ${SKIP_C3_IF_NO_BOXES:-false}
+      C3_URL: http://nginx:8080/v1/infer
+      C4_URL: http://c4-visualizer:8000/v1/render
+
+  c3-inference:
+    build: ./c3-inference
+    # container_name을 지정하면 --scale을 쓸 수 없으므로 넣지 않는다
+    environment:
+      SEGMENTER: ${SEGMENTER:-opencv}
+      DEVICE: ${DEVICE:-cpu}
+      SAM2_MODEL: ${SAM2_MODEL:-sam2.1_hiera_tiny}
+      SAM2_CHECKPOINT_DIR: /checkpoints
+      TORCH_NUM_THREADS: ${TORCH_NUM_THREADS:-4}
+      OMP_NUM_THREADS: ${TORCH_NUM_THREADS:-4}
+      MKL_NUM_THREADS: ${TORCH_NUM_THREADS:-4}
+      CIRCULARITY_THRESHOLD: ${CIRCULARITY_THRESHOLD:-0.80}
+      SOLIDITY_THRESHOLD: ${SOLIDITY_THRESHOLD:-0.95}
+      MASK_SCORE_MIN: ${MASK_SCORE_MIN:-0.5}
+      SIMULATED_INFER_MS: ${SIMULATED_INFER_MS:-0}
+      C4_URL: http://c4-visualizer:8000/v1/render
+    volumes:
+      - ./checkpoints:/checkpoints:ro
+
+  c4-visualizer:
+    build: ./c4-visualizer
+    environment:
+      C1_URL: http://c1-gateway:8000/v1/results

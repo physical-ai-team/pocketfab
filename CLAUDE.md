@@ -78,5 +78,12 @@
 - 한 서비스의 변경이 다른 서비스에 영향을 주면(API 형식, 환경변수) `docs/api-spec.md`도 함께 수정한다.
 - 판정 임계값 같은 튜닝 값은 환경변수로 노출하고, 기본값은 api-spec 6장의 표에 적는다.
 - 성능에 영향을 주는 변경을 했으면 `docs/performance-plan.md` 결과표 기준으로 다시 측정할 수 있게 한다.
-- 현재 상태: 설계 문서와 폴더 구조만 있고 코드는 아직 없다.
+- 현재 상태: 뼈대 파이프라인이 동작한다 (`docker compose up` → `tools/fake_camera.py` 또는 폰으로 확인).
+  남은 핵심 작업은 각 서비스 README의 "어디부터 채우면 되나"에 있다:
+  C2 `app/preprocess.py`, C3 `app/sam2_segmenter.py`(신규), C4 `app/draw.py`.
+- 서비스의 HTTP 처리(`main.py`)와 영상 처리 로직(`preprocess.py`, `*_segmenter.py`, `judge.py`, `draw.py`)은 분리한다.
+  비전공 담당자는 로직 파일만 고치면 되게 하고, OpenCV/torch 연산은 `run_in_threadpool`로 호출한다.
+- 변경 후 확인: `docker compose up -d --build --scale c3-inference=2` → `python tools/fake_camera.py --seconds 10`
+  → 처리 fps가 0보다 크고 `https://localhost/v1/metrics`의 `replicas`에 복제본이 고르게 나오는지 본다.
+  C3 판정 로직은 `c3-inference`에서 `pytest`.
 - 대상 과자는 팀에서 결정 중이다(2026-10-28 기준). 정해지면 이 파일과 api-spec 7.3을 갱신한다.

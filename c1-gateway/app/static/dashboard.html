@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PocketFab 대시보드</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f4f5f7; color: #222; }
+    header { padding: 12px 16px; background: #1f2937; color: #fff; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+    .card { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    #frame { width: 100%; background: #000; border-radius: 6px; min-height: 240px; display: block; }
+    h3 { margin: 0 0 8px; font-size: 15px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    td { padding: 3px 0; } td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    #qr { width: 180px; display: block; margin: 0 auto; }
+    #camera-url { font-size: 12px; word-break: break-all; text-align: center; color: #555; }
+    .defect { color: #d33; font-weight: 600; } .normal { color: #198754; } .uncertain { color: #b58900; }
+    #conn { font-size: 13px; opacity: .8; margin-left: 8px; }
+  </style>
+</head>
+<body>
+<header><strong>PocketFab</strong> 실시간 불량 검출 <span id="conn">연결 중…</span></header>
+<main>
+  <section class="card">
+    <img id="frame" alt="검출 결과가 여기에 표시됩니다">
+    <div id="frame-info" style="font-size:13px;color:#555;margin-top:6px">결과 대기 중</div>
+  </section>
+  <aside>
+    <div class="card">
+      <h3>스마트폰으로 접속</h3>
+      <img id="qr" src="/qr" alt="QR 코드">
+      <div id="camera-url"></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>처리 현황 (최근 1초)</h3>
+      <table id="stats"></table>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>현재 프레임</h3>
+      <table id="summary"></table>
+      <div id="objects" style="font-size:13px;margin-top:6px"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+// 스펙: docs/api-spec.md 5.1
+const $ = (id) => document.getElementById(id);
+
+fetch("/v1/config").then(r => r.json()).then(c => { $("camera-url").textContent = c.camera_url; });
+
+function rows(pairs) {
+  return pairs.map(([k, v]) => `<tr><td>${k}</td><td>${v ?? "-"}</td></tr>`).join("");
+}
+
+function onResult(m) {
+  $("frame").src = "data:image/jpeg;base64," + m.image_b64;
+  const l = m.latency_ms || {};
+  $("frame-info").textContent =
+    `frame ${m.frame_id} · session ${m.session_id} · replica ${m.replica ?? "-"} · 전체 ${l.total ?? "-"} ms ` +
+    `(C2 ${l.c2 ?? "-"} / C3 추론 ${l.c3_infer ?? "-"} / C4 ${l.c4 ?? "-"})`;
+  const s = m.summary || {};
+  $("summary").innerHTML = rows([["전체", s.total], ["정상", s.normal], ["불량", s.defect], ["판단불가", s.uncertain]]);
+  $("objects").innerHTML = (m.objects || []).map(o =>
+    `<div class="${o.verdict}">#${o.box_id} ${o.verdict} · C=${o.circularity?.toFixed(3)} · S=${o.solidity?.toFixed(3)}` +
+    `${o.defect_reasons?.length ? " (" + o.defect_reasons.join(", ") + ")" : ""}</div>`).join("");
+}
+
+function onStats(s) {
+  const reps = Object.entries(s.replicas || {}).map(([k, v]) => [`└ ${k}`, `${v} fps`]);
+  $("stats").innerHTML = rows([
+    ["입력", `${s.input_fps} fps`], ["처리", `${s.processed_fps} fps`],
+    ["드롭률", `${(s.drop_rate * 100).toFixed(0)}%`], ["처리 중", s.in_flight], ...reps,
+  ]);
+}
+
+function connect() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/dashboard`);
+  ws.onopen = () => { $("conn").textContent = "● 연결됨"; };
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.type === "result") onResult(m);
+    else if (m.type === "stats") onStats(m);
+  };
+  ws.onclose = () => { $("conn").textContent = "○ 연결 끊김, 재연결 중…"; setTimeout(connect, 1000); };
+}
+connect();
+</script>
+</body>
+</html>
