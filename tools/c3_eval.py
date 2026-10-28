@@ -100,6 +100,7 @@ def main():
         fp = sum(g == "normal" and v == "defect" for g, v, *_ in rows)
         fn = sum(g == "defect" and v != "defect" for g, v, *_ in rows)
         unc = sum(v == "uncertain" for _, v, *_ in rows)
+        normals = sum(g == "normal" for g, *_ in rows)
         prec, rec = tp / max(1, tp + fp), tp / max(1, tp + fn)
         f1 = 2 * prec * rec / max(1e-9, prec + rec)
         typed = [(gt_t, pr_t) for g, v, gt_t, pr_t in rows if g == "defect" and v == "defect"]
@@ -109,6 +110,8 @@ def main():
               f"유형 정확도 {type_acc:.3f}  uncertain {unc}"
               + (f"  IoU {np.mean(ious):.3f}" if ious else "")
               + (f"  지연 p50 {np.percentile(lat[1:] or lat, 50):.0f}ms" if lat else ""))
+        # 임계값 보정 기준 (performance-plan 3장): 정상 오경보율 2% 이하
+        print(f"  정상 오경보 {fp}/{normals} ({fp / max(1, normals):.1%})")
         missed = Counter(gt_t for g, v, gt_t, _ in rows if g == "defect" and v != "defect")
         if missed:
             print("  놓친 불량:", dict(missed))

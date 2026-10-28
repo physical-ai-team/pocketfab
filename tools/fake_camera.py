@@ -3,7 +3,7 @@
 폰 없이 파이프라인을 확인하거나, 녹화 영상으로 같은 조건을 반복 측정할 때 쓴다.
 
     python tools/fake_camera.py                               # 합성 영상 30fps, 20초
-    python tools/fake_camera.py --video data/videos/20261103_mix-d78-s55-l20-n0_screen.mp4 --seconds 60
+    python tools/fake_camera.py --video data/videos/demo.mp4 --seconds 600    # 줌 시연 예비 화면 (끝나면 반복)
     python tools/fake_camera.py --url wss://192.168.0.10/ws/camera
 
 서버가 1초마다 보내는 통계(보냄/수락/버림/처리 fps)를 출력하고, 끝나면 요약을 보여준다.
