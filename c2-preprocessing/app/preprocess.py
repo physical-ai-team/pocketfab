@@ -56,9 +56,11 @@ def detect_boxes(jpeg: bytes, proc_size: dict) -> list[dict]:
 
     h, w = proc_size["h"], proc_size["w"]
 
-    # 2. 그레이스케일 변환 및 이진화 (THRESH_BINARY로 변경하여 밝은 과자가 잡히도록 수정)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # 2. 색으로 이진화한다: 과자는 노랑·주황(따뜻한 색), 벨트는 회색·하늘색(차가운 색)이다.
+    #    LAB 색공간의 b 채널은 "파랑(작음) ↔ 노랑(큼)" 축이라, 이 값에 Otsu를 쓰면 과자가 흰색으로 남는다.
+    #    밝기(흑백)로 나누면 모니터 반사로 하얗게 뜬 과자와 벨트를 구분하지 못한다 (실측: 아래 줄 검출 2.3배 차이).
+    warmth = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[:, :, 2]
+    _, thresh = cv2.threshold(warmth, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # 3. 모폴로지: 닫힘으로 초코칩 구멍을 먼저 메우고, 열림으로 작은 잡음 제거
     kernel = np.ones((5, 5), np.uint8)
@@ -122,7 +124,9 @@ def drop_non_cookies(blobs: list, w: int, h: int) -> list:
     """(면적, 윤곽선) 목록에서 과자로 보기 어려운 것을 뺀다.
 
     - 너무 큰 덩어리: 면적 중간값의 MAX_AREA_VS_MEDIAN배 초과 (덩어리가 3개 이상일 때만. 적으면 중간값을 믿기 어렵다)
-    - 너무 길쭉한 덩어리: 가로/세로 비가 MIN_ASPECT~MAX_ASPECT 밖. 단, 화면 끝에 걸린 과자는 잘려서 길쭉하므로 봐준다
+    - 너무 길쭉한 덩어리: 가로/세로 비가 MIN_ASPECT~MAX_ASPECT 밖.
+      단, 좌우 끝에 걸린 과자는 세로로 가늘게 잘리므로 "너무 가는 쪽"(MIN_ASPECT 미만)만 봐준다.
+      가로로 긴 띠(MAX_ASPECT 초과)는 어디에 있든 과자가 아니다 (화면 테두리 띠, 벨트 경계선 등)
     """
     if len(blobs) >= 3:
         median = float(np.median([a for a, _ in blobs]))
@@ -131,8 +135,9 @@ def drop_non_cookies(blobs: list, w: int, h: int) -> list:
     kept = []
     for a, c in blobs:
         bx, by, bw, bh = cv2.boundingRect(c)
-        on_edge = bx <= 1 or by <= 1 or bx + bw >= w - 1 or by + bh >= h - 1
-        if on_edge or MIN_ASPECT <= bw / bh <= MAX_ASPECT:
+        on_side_edge = bx <= 1 or bx + bw >= w - 1
+        aspect = bw / bh
+        if aspect <= MAX_ASPECT and (aspect >= MIN_ASPECT or on_side_edge):
             kept.append((a, c))
     return kept
 
