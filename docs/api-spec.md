@@ -432,6 +432,7 @@ CPU/GPU 전환과 튜닝 값은 **코드에 하드코딩하지 않고 환경변�
 | `TRACK_MAX_SPEED` | C4 | `1.0` | 과자의 최대 속도 (화면 폭/초). 이보다 빨리 움직인 것은 같은 과자로 보지 않는다 |
 | `TRACK_MAX_AGE_S` | C4 | `15` | 이 시간 동안 안 보이면 추적을 끝낸다. 결과가 오는 간격보다 길어야 한다 (SAM 2 CPU 복제본 2개면 4~5초). 2초였을 때 SAM 2 시연에서 누적 집계가 0으로 남았다 |
 | `EDGE_MARGIN` | C4 | `0.01` | 박스가 화면 끝에서 이 비율 안에 닿으면 잘린 과자(`truncated`)로 본다 |
+| `TRACK_LOG_DIR` | C4 | (비움) | 지정하면 프레임마다 과자 위치·판정·추적 결과를 `<폴더>/<세션>.jsonl`에 남긴다. compose는 `/data/tracking` → `data/tracking/`. 분석은 `tools/analyze_tracking.py` |
 
 GPU 전환 계획: C3 Dockerfile에 빌드 인자 `TORCH_VARIANT=cpu|cu124`를 두고,
 `docker-compose.gpu.yml` 오버라이드에서 `DEVICE=cuda`와 GPU 예약(`deploy.resources.reservations.devices`)을

@@ -64,3 +64,7 @@ services:
       TRACK_MAX_SPEED: ${TRACK_MAX_SPEED:-1.0}
       TRACK_MAX_AGE_S: ${TRACK_MAX_AGE_S:-15}
       EDGE_MARGIN: ${EDGE_MARGIN:-0.01}
+      # 추적 기록: .env에 TRACK_LOG_DIR=/data/tracking을 넣으면 data/tracking/<세션>.jsonl로 남는다 (tools/analyze_tracking.py)
+      TRACK_LOG_DIR: ${TRACK_LOG_DIR:-}
+    volumes:
+      - ./data/tracking:/data/tracking
