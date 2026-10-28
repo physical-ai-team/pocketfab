@@ -206,7 +206,8 @@ C2가 수행하는 작업: 리사이즈 → 노이즈 제거 → 밝기 보정 �
 ### ③ C3 → C4: `POST http://c4-visualizer:8000/v1/render`
 
 C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마스크 추출 → 마스크 외곽선에서
-면적·둘레·볼록껍질 면적 계산 → 원형도 `C = 4πA / P²`, solidity `S = A / A_hull` → 판정 (아래 4.1)
+면적·둘레·볼록껍질·최소 외접원 계산 → 원형도 `C = 4πA / P²`, solidity `S = A / A_hull`,
+원 채움률 `F = A / (π·r_enc²)`, 오목 깊이 `D = 최대 오목 깊이 / r_enc` → 판정 (아래 4.1)
 
 | 파트 | 내용 |
 |---|---|
@@ -222,7 +223,9 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
     "model": "sam2.1_hiera_tiny",
     "device": "cpu",
     "circularity_threshold": 0.80,
-    "solidity_threshold": 0.95
+    "solidity_threshold": 0.95,
+    "fill_ratio_threshold": 0.94,
+    "concavity_threshold": 0.06
   },
   "objects": [
     {
@@ -231,11 +234,14 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
       "polygon": [[0.13, 0.31], [0.30, 0.32], [0.29, 0.57], [0.14, 0.56]],
       "area_px": 5320,
       "perimeter_px": 262.4,
-      "circularity": 0.971,
-      "solidity": 0.991,
+      "circularity": 0.903,
+      "solidity": 0.989,
+      "fill_ratio": 0.970,
+      "concavity": 0.023,
       "mask_score": 0.94,
       "verdict": "normal",
-      "defect_reasons": []
+      "defect_reasons": [],
+      "defect_type": null
     },
     {
       "box_id": 1,
@@ -245,9 +251,12 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
       "perimeter_px": 301.7,
       "circularity": 0.581,
       "solidity": 0.872,
+      "fill_ratio": 0.842,
+      "concavity": 0.801,
       "mask_score": 0.91,
       "verdict": "defect",
-      "defect_reasons": ["circularity", "solidity"]
+      "defect_reasons": ["circularity", "solidity", "fill_ratio", "concavity"],
+      "defect_type": "wedge"
     }
   ]
 }
@@ -261,9 +270,12 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
 | `objects[].area_px`, `perimeter_px` | `proc_size` 기준 픽셀 단위 |
 | `objects[].circularity` | `4π × area_px / perimeter_px²` (완전한 원 = 1.0). 전체적인 형태 변형에 민감 |
 | `objects[].solidity` | `area_px / 볼록껍질(cv2.convexHull) 면적` (오목한 곳이 없으면 1.0). 깨짐·이 빠짐에 민감 |
+| `objects[].fill_ratio` | 원 채움률 `area_px / 최소 외접원(cv2.minEnclosingCircle) 면적`. 잘리거나 파여도 외접원은 원래 원과 거의 같으므로 "원에서 없어진 양"을 과자 크기 없이 잰다. 볼록하게 잘린 `cut`·`half`에 민감 |
+| `objects[].concavity` | 오목 깊이 `최대 오목 깊이(cv2.convexityDefects) / 외접원 반지름`. 가장자리가 파인 `bite`·`wedge`에 민감 |
 | `objects[].mask_score` | SAM 2가 예측한 IoU 점수 (opencv 모드에서는 `null`) |
 | `objects[].verdict` | `normal` / `defect` / `uncertain` (판정 규칙은 4.1) |
-| `objects[].defect_reasons` | 임계값을 벗어난 지표 이름 목록: `"circularity"`, `"solidity"`. `normal`·`uncertain`이면 `[]` |
+| `objects[].defect_reasons` | 임계값을 벗어난 지표 이름 목록: `"circularity"`, `"solidity"`, `"fill_ratio"`, `"concavity"`. `normal`·`uncertain`이면 `[]` |
+| `objects[].defect_type` | 추정 불량 유형 `bite` / `cut` / `wedge` / `half` (4.1). `normal`·`uncertain`이면 `null` |
 
 응답: C4의 공통 응답을 받아 그대로 C2에 돌려준다.
 
@@ -272,12 +284,18 @@ C3가 수행하는 작업: `boxes`를 SAM 2 박스 프롬프트로 사용해 마
 위에서부터 순서대로 적용한다.
 
 1. `mask_score < MASK_SCORE_MIN` → `uncertain` (마스크를 믿을 수 없으므로 지표로 판정하지 않음. opencv 모드에서는 이 단계를 건너뜀)
-2. `circularity < CIRCULARITY_THRESHOLD` **또는** `solidity < SOLIDITY_THRESHOLD` → `defect`
-   (벗어난 지표를 모두 `defect_reasons`에 기록)
+2. 아래 중 **하나라도** 해당하면 `defect` (벗어난 지표를 모두 `defect_reasons`에 기록)
+   - `circularity < CIRCULARITY_THRESHOLD`
+   - `solidity < SOLIDITY_THRESHOLD`
+   - `fill_ratio < FILL_RATIO_THRESHOLD`
+   - `concavity > CONCAVITY_THRESHOLD`
 3. 그 외 → `normal`
 
-`circularity`, `solidity`는 `uncertain`일 때도 계산해서 채운다 (임계값 보정용 데이터 수집).
-두 임계값은 대상 과자가 정해진 뒤 테스트 데이터의 정상/불량 분포를 보고 보정한다.
+`defect`이면 `defect_type`을 추정한다. 오목하게 파였으면(`concavity > CONCAVITY_THRESHOLD`)
+`concavity > 0.45`일 때 `wedge`(중심까지 파임), 아니면 `bite`. 볼록하게 잘렸으면 `fill_ratio < 0.70`일 때 `half`, 아니면 `cut`.
+
+지표는 `uncertain`일 때도 계산해서 채운다 (임계값 보정용 데이터 수집).
+임계값 근거는 7.3의 측정표와 시뮬레이터 프레임 채점 결과(7.3 끝)다.
 
 ### ④ C4 → C1: `POST http://c1-gateway:8000/v1/results`
 
@@ -359,6 +377,8 @@ CPU/GPU 전환과 튜닝 값은 **코드에 하드코딩하지 않고 환경변�
 | `TORCH_NUM_THREADS` | C3 | `4` | 복제본 1개가 쓰는 CPU 스레드 수 (7장 참고) |
 | `CIRCULARITY_THRESHOLD` | C3 | `0.80` | 원형도가 이 값 미만이면 `defect`. 테스트 데이터로 보정 필요 |
 | `SOLIDITY_THRESHOLD` | C3 | `0.95` | solidity가 이 값 미만이면 `defect`. 테스트 데이터로 보정 필요 |
+| `FILL_RATIO_THRESHOLD` | C3 | `0.94` | 원 채움률이 이 값 미만이면 `defect` (`cut`·`half`). 정상 0.95~0.98 |
+| `CONCAVITY_THRESHOLD` | C3 | `0.06` | 오목 깊이가 이 값 초과면 `defect` (`bite`·`wedge`). 정상 0.015~0.035 |
 | `MASK_SCORE_MIN` | C3 | `0.5` | 이 값 미만이면 `uncertain` (sam2 모드만 해당) |
 | `SIMULATED_INFER_MS` | C3 | `0` | 추론 시간을 흉내 내는 지연(ms). CPU는 쓰지 않으므로 로드밸런싱·백프레셔 시험 전용 |
 
@@ -403,9 +423,11 @@ C2 박스 안에서 OpenCV 윤곽선(임계값 → 모폴로지 → 가장 큰 �
 대상 과자는 시뮬레이터(`tools/simulator/conveyor-cookie-sim.html`)의 **같은 크기 원형 초코칩 쿠키**로 확정됐다 (2026-10-28).
 불량은 `bite`, `cut`, `wedge`, `half` 4가지이고, 모두 원에서 한 덩어리를 잘라낸 형태다.
 
-**두 지표 중 하나라도 임계값을 벗어나면 불량**으로 판정한다 (4.1).
+**네 지표 중 하나라도 임계값을 벗어나면 불량**으로 판정한다 (4.1).
 - 원형도: 외곽 전체의 형태 변화에 반응한다 (`half`, `wedge`)
 - solidity: 오목하게 파인 곳에 반응한다 (`bite`, `wedge`). 볼록하게 잘린 `cut`, `half`는 정상과 구별하지 못한다
+- 원 채움률: 원에서 없어진 양에 반응한다 (`cut`, `half` 포함 모든 유형). 과자 크기를 몰라도 된다
+- 오목 깊이: 가장 깊게 파인 곳의 깊이에 반응한다 (`bite`, `wedge`). 작은 `bite`도 정상(0.02)과 크게 벌어진다
 
 #### 이상적인 마스크에서 잰 지표 범위
 
@@ -413,7 +435,7 @@ C2 박스 안에서 OpenCV 윤곽선(임계값 → 모폴로지 → 가장 큰 �
 C3와 같은 `judge.measure()`로 쟀다. 지름 78px 기준이며, 156px에서는 원형도가 최대 0.015 낮게 나온다.
 마스크 오차가 없는 "최선의 경우"이므로 실제 SAM 2 마스크에서는 범위가 더 넓어진다.
 
-| 유형 | 결손 크기 | 원형도 | solidity | 원 채움률(참고) |
+| 유형 | 결손 크기 | 원형도 | solidity | 원 채움률 |
 |---|---|---|---|---|
 | 정상 | — | 0.903 | 0.989 | 0.970 |
 | `bite` | 25% / 55% / 85% | 0.85~0.87 / 0.80~0.85 / 0.75~0.83 | 0.96~0.98 / 0.94~0.96 / 0.90~0.95 | 0.94~0.95 / 0.89~0.93 / 0.82~0.91 |
@@ -421,16 +443,44 @@ C3와 같은 `judge.measure()`로 쟀다. 지름 78px 기준이며, 156px에서�
 | `wedge` | 25% / 55% / 85% | 0.57~0.61 (모든 크기) | 0.88~0.91 / 0.85~0.89 / 0.83~0.87 | 0.86~0.89 / 0.82~0.86 / 0.77~0.83 |
 | `half` | 25% / 55% / 85% | 0.67~0.76 (모든 크기) | 0.97~0.99 (모든 크기) | 0.51~0.59 (모든 크기) |
 
+오목 깊이와 원 채움률을 결손 크기 10%(가장 작은 결손)와 여러 지름에서 따로 쟀다
+(`python tools/simulator/shape_metrics.py --strength 0.10 0.25 --diameter 40 78 156`).
+
+| 유형 (결손 10%) | 원 채움률 40 / 78 / 156px | 오목 깊이 40 / 78 / 156px |
+|---|---|---|
+| 정상 | 0.950 / 0.970 / 0.981 | 0.035 / 0.023 / 0.015 |
+| `bite` | 0.93~0.94 / 0.95 / 0.96 | 0.08~0.15 / 0.10~0.14 / 0.11~0.13 |
+| `cut` | 0.90~0.92 / 0.92~0.93 / 0.93~0.94 | 0.03~0.05 / 0.02~0.03 / 0.02 |
+| `wedge` | 0.86~0.88 / 0.88~0.90 / 0.89~0.90 | 0.71~0.84 / 0.80~0.86 / 0.83~0.87 |
+| `half` | 0.57~0.60 / 0.58~0.59 / 0.59~0.60 | 0.03~0.07 / 0.02~0.04 / 0.01~0.02 |
+
+→ `FILL_RATIO_THRESHOLD=0.94`(정상 최소 0.950 vs `cut` 최대 0.942), `CONCAVITY_THRESHOLD=0.06`(정상 최대 0.035 vs `bite` 최소 0.082).
+`bite`(≤0.32)와 `wedge`(≥0.64)는 오목 깊이 0.45로, `cut`(≥0.72)과 `half`(≤0.60)는 원 채움률 0.70으로 나뉜다.
+
 정리하면 다음과 같다.
 - **정상 쿠키의 원형도는 1.0이 아니라 약 0.90이다.** 픽셀 외곽의 계단 때문에 둘레가 길게 계산되기 때문이다.
   해상도(`proc_size`)를 바꾸면 이 값도 바뀌므로 임계값을 다시 보정해야 한다.
-- **현재 기본값(원형도 < 0.80, solidity < 0.95)으로 확실히 잡히는 것은 `wedge`, `half`뿐이다.**
+- **원형도·solidity만으로는(원형도 < 0.80, solidity < 0.95) 확실히 잡히는 것이 `wedge`, `half`뿐이다.**
   `bite`는 결손 크기 25%에서 모두 놓치고 55%에서 절반쯤만 잡는다(solidity 0.938~0.963). `cut`은 모두 놓친다.
-- `bite`는 solidity 임계값을 정상(0.989) 가까이 올리면(예: 0.98) 잡을 수 있다. 다만 실제 마스크의 잡음에 대한 여유가 작다.
-- **`cut`은 두 지표 모두 정상과 겹친다.** 결손 크기 25%의 원형도 상한(0.897)이 정상(0.903)과 거의 같다.
-  보조 지표가 필요하다. 후보는 **원 채움률**(면적 / 최소 외접원 면적)이다. 정상 0.970, `cut` 0.74~0.92로 나뉜다.
-  같은 크기 쿠키라는 점을 이용해 기준 면적과 비교하는 방법도 있다. 어느 쪽을 쓸지는 검토 중이다.
+  `cut`은 두 지표 모두 정상과 겹친다 (결손 25%의 원형도 상한 0.897 ≈ 정상 0.903).
+- 그래서 **원 채움률**(`cut`·`half`)과 **오목 깊이**(`bite`·`wedge`)를 추가했다 (2026-10-28). 위 표처럼 두 지표는
+  결손 10%에서도 정상과 겹치지 않는다. 원 채움률은 외접원을 쓰므로 과자 지름을 C3에 따로 알려 줄 필요가 없다.
 - 화면 가장자리에 걸친 과자는 잘린 모양으로 보여서 `half`나 `cut`처럼 측정된다. 판정에서 빼야 한다 (7.4).
+
+#### 시뮬레이터 프레임 채점 결과 (2026-10-28)
+
+`python tools/c3_eval.py <데이터 폴더> [--segmenter sam2 | --masks gt]`로 쟀다. 시뮬레이터 프레임 + 정답 라벨에서
+화면 가장자리 과자는 빼고, 정답 bbox에 8% 패딩을 붙여 C2 박스 대신 넣었다 (C2 박스 검출과 무관하게 C3만 평가).
+조건: 라인 3개·라인 간격 150px·속도 130px/s·지름 78px, 기본(결손 55%), 작은 결손(20%), 노이즈 50%, 조명 불균일 70%.
+
+| 마스크 | 판정 규칙 | 불량 Recall (4조건) | 불량 Precision | 유형 정확도 | 마스크 IoU |
+|---|---|---|---|---|---|
+| 정답 폴리곤 | 원형도 + solidity | 0.29 ~ 0.72 (`cut` 전부, `bite` 다수 놓침) | 1.000 | — | — |
+| 정답 폴리곤 | **4지표** | **1.000** | 1.000 | 1.000 | — |
+| SAM 2 tiny | **4지표** | **1.000** | 1.000 | 1.000 | 0.972 ~ 0.974 |
+| OpenCV 기준선 | **4지표** | 1.000 | 1.000 | 0.78 ~ 0.90 (`half`→`bite` 혼동) | 0.848 ~ 0.857 |
+
+SAM 2 마스크가 OpenCV 윤곽선보다 외곽이 정확해(IoU 0.97 vs 0.85) 유형 구분까지 맞힌다 (7.2의 "SAM 2를 쓰는 근거").
 
 ### 7.4 화면 가장자리에 걸친 과자
 

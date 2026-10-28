@@ -1,12 +1,12 @@
 # C3 Inference — 담당: 박민성 (기술 지원: 김세광)
 
-C2가 준 박스를 프롬프트로 SAM 2 마스크를 뽑고, 원형도·solidity로 정상/불량을 판정한다.
+C2가 준 박스를 프롬프트로 SAM 2 마스크를 뽑고, 원형도·solidity·원 채움률·오목 깊이로 정상/불량과 불량 유형을 판정한다.
 스펙: [docs/api-spec.md](../docs/api-spec.md) 4장 ②③, 4.1, 7장
 
 ## 파일
 | 파일 | 내용 |
 |---|---|
-| `app/judge.py` | 원형도·solidity 계산과 판정 규칙. **완성됨** (SAM 2 모드도 그대로 사용) |
+| `app/judge.py` | 원형도·solidity·원 채움률·오목 깊이 계산, 판정 규칙, 불량 유형 추정 (SAM 2 모드도 그대로 사용) |
 | `app/opencv_segmenter.py` | `SEGMENTER=opencv` 기준선. 박스 안 OpenCV 윤곽선 |
 | `app/main.py` | 서버. 한 번에 1장만 추론하고, 바쁘면 503 → Nginx가 다른 복제본으로 보냄 |
 | `tests/test_judge.py` | 판정 규칙 테스트 (`pytest`) |
@@ -25,3 +25,12 @@ C2가 준 박스를 프롬프트로 SAM 2 마스크를 뽑고, 원형도·solidi
 cd c3-inference
 pytest
 ```
+
+## 판정 정확도 채점
+시뮬레이터 프레임(`frame_*.png`)과 정답 라벨(`frame_*.json`)이 있는 폴더로 C3 판정을 채점한다 (레포 루트에서).
+```powershell
+python tools/c3_eval.py data/sim/base                     # OpenCV 모드
+python tools/c3_eval.py data/sim/base --segmenter sam2    # SAM 2 모드 (checkpoints/ 필요)
+python tools/c3_eval.py data/sim/base --masks gt          # 정답 폴리곤으로 판정 규칙만
+```
+결과와 임계값 근거: [api-spec 7.3](../docs/api-spec.md)

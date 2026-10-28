@@ -54,3 +54,33 @@ def test_polygon_is_normalized():
     poly = run(img)["polygon"]
     assert 3 <= len(poly) <= judge.MAX_POLYGON_POINTS
     assert all(0 <= x <= 1 and 0 <= y <= 1 for x, y in poly)
+
+
+def test_cut_snack_is_defect_by_fill_ratio():
+    """직선으로 잘린 과자(cut)는 볼록해서 원형도·solidity로 못 잡고, 원 채움률로 잡는다."""
+    img = blank()
+    cv2.circle(img, (200, 150), 60, (200, 180, 140), -1)
+    img[:, 245:] = 40  # 오른쪽을 직선으로 잘라냄
+    obj = run(img)
+    assert obj["verdict"] == "defect", obj
+    assert "fill_ratio" in obj["defect_reasons"]
+    assert obj["defect_type"] == "cut"
+
+
+def test_bitten_snack_is_defect_by_concavity():
+    """가장자리가 둥글게 파인 과자(bite)는 오목 깊이로 잡는다."""
+    img = blank()
+    cv2.circle(img, (200, 150), 60, (200, 180, 140), -1)
+    cv2.circle(img, (262, 150), 25, (40, 40, 40), -1)  # 오른쪽 가장자리를 원형으로 파냄
+    obj = run(img)
+    assert obj["verdict"] == "defect", obj
+    assert "concavity" in obj["defect_reasons"]
+    assert obj["defect_type"] == "bite"
+
+
+def test_normal_snack_has_no_defect_type():
+    img = blank()
+    cv2.circle(img, (200, 150), 60, (200, 180, 140), -1)
+    obj = run(img)
+    assert obj["defect_type"] is None
+    assert obj["fill_ratio"] > 0.95 and obj["concavity"] < 0.05

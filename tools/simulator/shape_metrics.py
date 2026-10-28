@@ -1,4 +1,4 @@
-"""시뮬레이터의 불량 형상별 원형도·solidity 분포를 측정한다 (이상적인 마스크 기준).
+"""시뮬레이터의 불량 형상별 판정 지표(원형도·solidity·원 채움률·오목 깊이) 분포를 측정한다 (이상적인 마스크 기준).
 
 conveyor-cookie-sim.html의 makeShape()를 그대로 옮겨 과자 외곽을 만들고, 래스터화한 뒤
 C3와 같은 함수(c3-inference/app/judge.py의 measure)로 지표를 잰다.
@@ -85,17 +85,17 @@ def main():
     for strength in args.strength:
         for diameter in args.diameter:
             print(f"\n결손 크기 {strength:.0%}, 지름 {diameter}px  (표본 {args.samples}개, 개체 편차 amp 0.55~1.0)")
-            print(f"{'유형':6s} {'원형도':>13s} {'solidity':>13s} {'원 채움률(참고)':>16s}")
+            print(f"{'유형':6s} {'원형도':>13s} {'solidity':>13s} {'원 채움률':>13s} {'오목 깊이':>13s}")
             for typ in TYPES:
-                circ, solid, fill = [], [], []
+                circ, solid, fill, conc = [], [], [], []
                 for _ in range(args.samples):
                     contour = rasterize(make_radius(typ, strength, 0.55 + random.random() * 0.45), diameter)
                     m = measure(contour)
                     circ.append(m["circularity"])
                     solid.append(m["solidity"])
-                    _, enc_r = cv2.minEnclosingCircle(contour)
-                    fill.append(cv2.contourArea(contour) / (math.pi * enc_r * enc_r))
-                print(f"{typ:6s} {span(circ):>13s} {span(solid):>13s} {span(fill):>16s}")
+                    fill.append(m["fill_ratio"])
+                    conc.append(m["concavity"])
+                print(f"{typ:6s} {span(circ):>13s} {span(solid):>13s} {span(fill):>13s} {span(conc):>13s}")
 
 
 if __name__ == "__main__":
