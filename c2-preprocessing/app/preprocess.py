@@ -71,15 +71,19 @@ def detect_boxes(jpeg: bytes, proc_size: dict) -> list[dict]:
     # 면적 기준 내림차순 정렬 후 최대 30개까지만 선택
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:30]
 
-    boxes = []
     min_area = (w * h) * 0.003  # 화면의 0.3% 미만은 잡음으로 보고 버림
-    box_id = 0
-
+    blobs = []  # (윤곽선 면적, 윤곽선)
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        if area < min_area:
-            continue
+        if area >= min_area:
+            blobs.append((area, cnt))
 
+    # 5. 과자 하나로 볼 수 없는 덩어리는 버린다 (모니터 반사로 밝아진 배경, 붙어 버린 과자 두 개, 벨트 테두리 띠 등)
+    blobs = drop_non_cookies(blobs, w, h)
+
+    boxes = []
+    box_id = 0
+    for area, cnt in blobs:
         # 사각형 바운딩 박스 추출 (x, y, w, h)
         bx, by, bw, bh = cv2.boundingRect(cnt)
 
@@ -107,3 +111,27 @@ def detect_boxes(jpeg: bytes, proc_size: dict) -> list[dict]:
         box_id += 1
 
     return boxes
+
+
+# 과자가 아닌 덩어리를 거르는 기준. 시뮬레이터 과자는 모두 지름이 같다는 점을 이용한다.
+MAX_AREA_VS_MEDIAN = 1.6   # 면적이 "보통 과자"(중간값)의 1.6배를 넘으면 과자 두 개 이상이 붙었거나 배경이다
+MIN_ASPECT, MAX_ASPECT = 0.4, 2.5  # 가로/세로 비. 반쪽 과자(half)가 약 2라서 2.5까지는 허용한다
+
+
+def drop_non_cookies(blobs: list, w: int, h: int) -> list:
+    """(면적, 윤곽선) 목록에서 과자로 보기 어려운 것을 뺀다.
+
+    - 너무 큰 덩어리: 면적 중간값의 MAX_AREA_VS_MEDIAN배 초과 (덩어리가 3개 이상일 때만. 적으면 중간값을 믿기 어렵다)
+    - 너무 길쭉한 덩어리: 가로/세로 비가 MIN_ASPECT~MAX_ASPECT 밖. 단, 화면 끝에 걸린 과자는 잘려서 길쭉하므로 봐준다
+    """
+    if len(blobs) >= 3:
+        median = float(np.median([a for a, _ in blobs]))
+        blobs = [(a, c) for a, c in blobs if a <= median * MAX_AREA_VS_MEDIAN]
+
+    kept = []
+    for a, c in blobs:
+        bx, by, bw, bh = cv2.boundingRect(c)
+        on_edge = bx <= 1 or by <= 1 or bx + bw >= w - 1 or by + bh >= h - 1
+        if on_edge or MIN_ASPECT <= bw / bh <= MAX_ASPECT:
+            kept.append((a, c))
+    return kept
