@@ -68,6 +68,10 @@
   패키지를 추가하면 `environment.yml`에 반영한다. torch/SAM 2는 용량이 커서 C3 개발을 시작할 때 추가한다.
 - Docker: 각 서비스는 conda가 아니라 자기 폴더의 `requirements.txt` + pip을 쓴다 (기본 이미지 `python:3.11-slim`).
 - 서비스 내부 포트는 모두 `8000`이고, 서비스 이름(`c1-gateway` 등)으로 서로 호출한다.
+- **DB는 쓰지 않는다.** 큰 파일은 git 밖에서 관리한다.
+  - SAM 2 체크포인트: `python scripts/download_checkpoints.py [tiny|small]` → `checkpoints/` (git 제외).
+    Docker 이미지에 넣지 않고 C3에 볼륨 마운트한다 (`SAM2_CHECKPOINT_DIR`). 지원 모델은 tiny, small뿐이다.
+  - 테스트 영상·이미지: Google Drive로 공유하고 `data/`에 둔다 (git 제외). 폴더 구조와 파일 이름 규칙은 README의 "데이터 공유" 섹션을 따른다.
 
 ## 작업 규칙
 

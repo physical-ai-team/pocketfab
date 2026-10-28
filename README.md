@@ -77,6 +77,10 @@ pocketfab/
 ├── docs/
 │   ├── api-spec.md          # 컨테이너 간 API 스펙
 │   └── performance-plan.md  # 성능 측정 계획
+├── scripts/
+│   └── download_checkpoints.py  # SAM 2 체크포인트 다운로드
+├── checkpoints/         # SAM 2 체크포인트 (git 제외, 스크립트로 받음)
+├── data/                # 테스트 영상·이미지 (git 제외, Google Drive로 공유)
 ├── environment.yml      # 로컬 개발용 conda 환경
 ├── CLAUDE.md
 └── README.md
@@ -95,7 +99,27 @@ conda env create -f environment.yml
 conda activate pocketfab
 ```
 
-### 2. 전체 시스템 실행 (Docker)
+### 2. SAM 2 체크포인트 다운로드
+
+모델 파일은 용량이 커서 git에 올리지 않습니다. Meta 공식 경로에서 `checkpoints/` 폴더로 받습니다.
+표준 라이브러리만 사용하므로 별도 패키지 설치 없이 실행할 수 있습니다.
+
+```powershell
+conda activate pocketfab
+python scripts/download_checkpoints.py           # tiny + small 모두
+python scripts/download_checkpoints.py tiny      # tiny만
+python scripts/download_checkpoints.py --force small   # 다시 받기
+```
+
+| 모델 | 파일 | 용량 | 용도 |
+|---|---|---|---|
+| `tiny` | `checkpoints/sam2.1_hiera_tiny.pt` | 약 149MB | 기본값 (CPU 실시간용) |
+| `small` | `checkpoints/sam2.1_hiera_small.pt` | 약 176MB | 정확도 비교 실험용 |
+
+- 이미 받은 파일은 크기를 비교해서 건너뜁니다. 다운로드가 중간에 끊기면 `.part` 파일만 남으니 다시 실행하면 됩니다.
+- C3 컨테이너는 이 폴더를 볼륨으로 마운트해서 사용할 예정입니다 (`SAM2_CHECKPOINT_DIR`).
+
+### 3. 전체 시스템 실행 (Docker)
 
 ```powershell
 # (예정) PC의 LAN IP 확인 후 설정 — QR코드에 들어갑니다
@@ -105,7 +129,7 @@ $env:PUBLIC_HOST = "192.168.0.10"
 docker compose up --build --scale c3-inference=3
 ```
 
-### 3. 접속
+### 4. 접속
 
 1. PC 브라우저에서 `https://<PUBLIC_HOST>/` 대시보드를 열고 QR코드를 확인합니다.
 2. 같은 Wi-Fi에 연결된 스마트폰으로 QR을 찍습니다.
@@ -114,10 +138,79 @@ docker compose up --build --scale c3-inference=3
 
 > Windows 방화벽에서 443 포트 인바운드를 허용해야 스마트폰에서 접속할 수 있습니다.
 
-### 4. GPU 환경으로 전환 (예정)
+### 5. GPU 환경으로 전환 (예정)
 
 ```powershell
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+## 데이터 공유
+
+테스트 영상과 이미지는 git에 올리지 않고 **Google Drive**로 공유합니다 (`data/`는 `.gitignore`로 제외).
+
+- **공유 드라이브 링크**: `(추후 추가)`
+- **관리 담당**: 이기태 (촬영·수집)
+
+### 받는 방법
+
+1. 위 드라이브에서 `data/` 폴더를 통째로 내려받습니다.
+2. 레포 루트에 `data/`로 둡니다. 폴더 구조는 아래와 같아야 합니다.
+3. 새 데이터를 올릴 때는 드라이브에 올린 뒤, 드라이브에 있는 `data/README.md` 목록도 함께 갱신합니다 (이 파일도 git이 아니라 드라이브에서 관리합니다).
+
+### 폴더 구조
+
+```
+data/
+├── README.md               # 데이터 목록 (파일명, 촬영일, 과자, 촬영 조건, 개수)
+├── raw/                    # 원본 녹화 영상 (가공 전, 촬영 세션 단위)
+│   └── 20261103_s01/
+│       ├── video.mp4
+│       └── session.json    # 촬영 조건 (아래 참고)
+├── clips/                  # 평가·부하 테스트용으로 자른 짧은 클립 (5~30초)
+│   ├── normal/             # 정상 과자만
+│   ├── defect/
+│   │   ├── broken/         # 깨짐 (이 빠짐, 쪼개짐)
+│   │   └── deformed/       # 형태 변형 (찌그러짐, 늘어남)
+│   ├── mixed/              # 정상·불량이 섞인 실제 시연 시나리오 → 성능 측정 기본 입력
+│   └── empty/              # 과자 없는 컨베이어 (오검출·빈 프레임 처리 확인용)
+└── frames/                 # 임계값 보정용 정지 프레임 (과자 1개씩 라벨이 확실한 것)
+    ├── normal/
+    └── defect/
+        ├── broken/
+        └── deformed/
+```
+
+- **`clips/`** 는 성능 측정용 부하 생성 스크립트의 입력이고(`mixed/`가 기본), 판정 정확도 평가에도 씁니다.
+- **`frames/`** 는 원형도·solidity의 정상/불량 분포를 보고 `CIRCULARITY_THRESHOLD`, `SOLIDITY_THRESHOLD`를 정하는 데 씁니다.
+- 대상 과자가 여러 종류가 되면 `normal/`, `defect/` 아래에 과자 이름으로 하위 폴더를 한 단계 더 둡니다.
+
+### 파일 이름 규칙
+
+`{촬영일}_{과자}_{라벨}_{번호}.{확장자}` — 영문 소문자, 단어는 `-`로 연결합니다.
+
+```
+20261103_choco-cookie_broken_001.mp4
+20261103_choco-cookie_normal_012.jpg
+```
+
+라벨: `normal`, `broken`, `deformed`, `mixed`, `empty`
+
+### 촬영 조건 기록 (`session.json`)
+
+같은 과자라도 조명과 거리가 바뀌면 지표 값이 달라지므로, 촬영 세션마다 조건을 남깁니다.
+
+```json
+{
+  "date": "2026-11-03",
+  "snack": "choco-cookie",
+  "device": "Galaxy S23",
+  "resolution": "640x480",
+  "fps": 30,
+  "lighting": "LED 스탠드 1개, 위쪽 45도",
+  "camera_height_cm": 30,
+  "conveyor_speed": "중간",
+  "notes": ""
+}
 ```
 
 ## 알려진 제약

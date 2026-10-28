@@ -343,7 +343,8 @@ CPU/GPU 전환과 튜닝 값은 **코드에 하드코딩하지 않고 환경변�
 | `MAX_BOXES` | C2 | `16` | 프레임당 최대 박스 수 |
 | `DEVICE` | C3 | `cpu` | `cpu` / `cuda` |
 | `SEGMENTER` | C3 | `sam2` | `sam2` / `opencv` (SAM 2 없이 C2 박스 영역의 OpenCV 윤곽선만 사용) |
-| `SAM2_MODEL` | C3 | `sam2.1_hiera_tiny` | `tiny` / `small` / `base_plus` / `large` |
+| `SAM2_MODEL` | C3 | `sam2.1_hiera_tiny` | `sam2.1_hiera_tiny` / `sam2.1_hiera_small` (`scripts/download_checkpoints.py`로 받을 수 있는 것) |
+| `SAM2_CHECKPOINT_DIR` | C3 | `/checkpoints` | 체크포인트 폴더. 레포의 `checkpoints/`를 이 경로로 볼륨 마운트한다 |
 | `TORCH_NUM_THREADS` | C3 | `4` | 복제본 1개가 쓰는 CPU 스레드 수 (7장 참고) |
 | `CIRCULARITY_THRESHOLD` | C3 | `0.80` | 원형도가 이 값 미만이면 `defect`. 테스트 데이터로 보정 필요 |
 | `SOLIDITY_THRESHOLD` | C3 | `0.95` | solidity가 이 값 미만이면 `defect`. 테스트 데이터로 보정 필요 |
