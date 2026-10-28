@@ -14,7 +14,8 @@ from dataclasses import dataclass, field
 COUNT_LINE_X = float(os.getenv("COUNT_LINE_X", "0.34"))   # 검사선 x (0~1). 시뮬레이터 기본값과 같다
 COUNT_DIRECTION = os.getenv("COUNT_DIRECTION", "left")    # 과자가 움직이는 방향: left / right
 TRACK_MAX_SPEED = float(os.getenv("TRACK_MAX_SPEED", "1.0"))  # 화면 폭/초. 이보다 빨리 움직이면 다른 과자로 본다
-TRACK_MAX_AGE_S = float(os.getenv("TRACK_MAX_AGE_S", "2.0"))  # 이 시간 동안 안 보이면 추적을 끝낸다
+# 이 시간 동안 안 보이면 추적을 끝낸다. 결과가 오는 간격보다 길어야 한다 (SAM 2 CPU 복제본 2개면 4~5초, 가끔 한 장 버려지면 9초)
+TRACK_MAX_AGE_S = float(os.getenv("TRACK_MAX_AGE_S", "15"))
 EDGE_MARGIN = float(os.getenv("EDGE_MARGIN", "0.01"))     # 박스가 화면 끝에서 이만큼 안에 닿으면 잘린 과자로 본다
 
 BACKTRACK_TOLERANCE = 0.01  # 반대 방향으로 이만큼은 흔들려도 같은 과자로 인정
