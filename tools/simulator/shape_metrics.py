@@ -1,4 +1,6 @@
-"""시뮬레이터의 불량 형상별 판정 지표(원형도·solidity·원 채움률·오목 깊이) 분포를 측정한다 (이상적인 마스크 기준).
+"""시뮬레이터의 불량 형상별 원형도·solidity·원 채움률 분포와 현재 임계값의 불량 판정률을 잰다 (이상적인 마스크 기준).
+
+임계값은 C3와 같은 환경변수(CIRCULARITY_THRESHOLD 등)를 읽으므로, 값을 바꿔 가며 미리 시험해 볼 수 있다.
 
 conveyor-cookie-sim.html의 makeShape()를 그대로 옮겨 과자 외곽을 만들고, 래스터화한 뒤
 C3와 같은 함수(c3-inference/app/judge.py의 measure)로 지표를 잰다.
@@ -20,7 +22,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "c3-inference"))
-from app.judge import measure  # noqa: E402
+from app.judge import judge, measure  # noqa: E402
 
 SEG = 180  # 시뮬레이터와 같은 외곽 분할 수
 TYPES = ["round", "bite", "cut", "wedge", "half"]
@@ -85,17 +87,18 @@ def main():
     for strength in args.strength:
         for diameter in args.diameter:
             print(f"\n결손 크기 {strength:.0%}, 지름 {diameter}px  (표본 {args.samples}개, 개체 편차 amp 0.55~1.0)")
-            print(f"{'유형':6s} {'원형도':>13s} {'solidity':>13s} {'원 채움률':>13s} {'오목 깊이':>13s}")
+            print(f"{'유형':6s} {'원형도':>13s} {'solidity':>13s} {'원 채움률':>13s} {'불량 판정률':>10s}")
             for typ in TYPES:
-                circ, solid, fill, conc = [], [], [], []
+                circ, solid, fill, defect = [], [], [], 0
                 for _ in range(args.samples):
                     contour = rasterize(make_radius(typ, strength, 0.55 + random.random() * 0.45), diameter)
                     m = measure(contour)
                     circ.append(m["circularity"])
                     solid.append(m["solidity"])
                     fill.append(m["fill_ratio"])
-                    conc.append(m["concavity"])
-                print(f"{typ:6s} {span(circ):>13s} {span(solid):>13s} {span(fill):>13s} {span(conc):>13s}")
+                    defect += judge(m, mask_score=None)[0] == "defect"
+                print(f"{typ:6s} {span(circ):>13s} {span(solid):>13s} {span(fill):>13s} "
+                      f"{defect / args.samples:>10.0%}")
 
 
 if __name__ == "__main__":

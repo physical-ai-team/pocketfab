@@ -24,7 +24,7 @@ def test_round_snack_is_normal():
     cv2.circle(img, (200, 150), 60, (200, 180, 140), -1)
     obj = run(img)
     assert obj["verdict"] == "normal", obj
-    assert obj["circularity"] > 0.85 and obj["solidity"] > 0.95
+    assert obj["circularity"] > 0.85 and obj["solidity"] > 0.95 and obj["fill_ratio"] > 0.95
 
 
 def test_chipped_snack_is_defect_by_solidity():
@@ -44,8 +44,20 @@ def test_squashed_snack_is_defect_by_circularity():
     assert "circularity" in obj["defect_reasons"]
 
 
+def test_straight_cut_is_defect_by_fill_ratio():
+    # 볼록하게 잘린 cut은 solidity로는 정상과 구별되지 않고 원 채움률이 잡아야 한다 (api-spec 7.3)
+    img = blank()
+    cv2.circle(img, (200, 150), 60, (200, 180, 140), -1)
+    cv2.rectangle(img, (200 + 42, 0), (W, H), (40, 40, 40), -1)  # 중심에서 0.7r 떨어진 직선으로 잘림
+    obj = run(img)
+    assert obj["verdict"] == "defect", obj
+    assert "fill_ratio" in obj["defect_reasons"]
+    assert "solidity" not in obj["defect_reasons"]
+
+
 def test_low_mask_score_is_uncertain():
-    assert judge.judge(0.99, 0.99, mask_score=0.1) == ("uncertain", [])
+    metrics = {"circularity": 0.99, "solidity": 0.99, "fill_ratio": 0.99}
+    assert judge.judge(metrics, mask_score=0.1) == ("uncertain", [])
 
 
 def test_polygon_is_normalized():

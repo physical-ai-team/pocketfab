@@ -26,6 +26,8 @@
 
 검사 대상은 **`tools/simulator/conveyor-cookie-sim.html`(시뮬레이터)이 만드는 합성 영상의 쿠키**다.
 시연은 이 화면을 폰으로 찍고, 평가는 시뮬레이터가 저장한 프레임 + 정답 라벨을 쓴다.
+평가 데이터는 시뮬레이터의 **자동 캡처**(PocketFab 추가 기능, `autoCapture()`)로 만든다. 프레임과 라벨이 같은 순간에 만들어지고 `0001.png` + `0001.json` ZIP으로 나온다.
+시뮬레이터를 고칠 때는 원래 기능(`makeShape()`, 라벨 형식)을 바꾸지 않는다. 바꾸면 `shape_metrics.py`와 평가 계획도 같이 고친다.
 
 - **과자**: 모두 **같은 지름의 원형 초코칩 쿠키**다 (지름은 설정값, 18~200px). 갈색 방사형 그라데이션, 어두운 초코칩 3~8개, 진한 가장자리 테두리. 그림자는 오른쪽 아래로 진다.
 - **배경**: 어두운 벨트(`#2a2e31`, 바탕 `#14181b`), **1~6개 가로 라인**, 오른쪽 → 왼쪽 이동, 검사선은 화면 폭 34% 위치에 고정.
@@ -34,17 +36,23 @@
 
 | 유형 | 모양 | 잡는 지표 |
 |---|---|---|
-| `bite` 한쪽 파임 | 가장자리가 원형으로 파임 (오목) | 오목 깊이 (solidity는 작은 결손을 놓침) |
-| `cut` 단면 절단 | 직선으로 잘림 (볼록) | 원 채움률 (원형도·solidity로는 못 잡음) |
-| `wedge` 조각 결손 | 중심까지 부채꼴로 빠짐 (오목) | 원형도 + solidity |
-| `half` 반쪽 파손 | 반원 (볼록) | 원형도 |
+| `bite` 한쪽 파임 | 가장자리가 원형으로 파임 (오목) | solidity, 원 채움률 (결손이 작으면 셋 다 약함) |
+| `cut` 단면 절단 | 직선으로 잘림 (볼록) | **원 채움률** (원형도·solidity는 정상과 겹침) |
+| `wedge` 조각 결손 | 중심까지 부채꼴로 빠짐 (오목) | 세 지표 모두 |
+| `half` 반쪽 파손 | 반원 (볼록) | 원형도, 원 채움률 |
 
-- 정상 쿠키의 원형도는 픽셀 외곽 때문에 약 0.90이다 (1.0이 아님). 원형도·solidity만으로는 `bite`의 상당수와 `cut`을 놓쳐서
-  원 채움률·오목 깊이를 추가했다 (api-spec 7.3, 시뮬레이터 4조건에서 불량 Recall 1.000).
+- 정상 쿠키는 원형도 약 0.90(픽셀 외곽 때문에 1.0이 아님), solidity 0.99, 원 채움률 0.97이다.
+  현재 기본 임계값(0.80 / 0.95 / 0.94)은 이상적 마스크로 정한 임시값이다. 결손 25%의 `bite`는 아직 잘 못 잡는다.
 - 라벨 JSON은 COCO와 비슷하다 (`bbox` = `[x, y, w, h]` 픽셀, `segmentation` = 180점 폴리곤 픽셀, 좌표는 저장된 PNG 픽셀 기준).
   `category`는 `round`/`deformed`, `defect_type`은 위 4종이다. 형식 분석은 performance-plan 7.1에 있다.
 - 화면 양 끝에는 일부만 보이는 과자가 항상 있다. 정상 과자가 잘려 보여 불량으로 판정되므로 판정·평가에서 빼야 한다 (api-spec 7.4).
-- 한 과자가 여러 프레임에 반복해서 찍히는 문제(중복 집계)와 입력 방식(폰 촬영 / 프레임 직접 입력)은 **결정 대기 중**이다.
+- 중복 집계는 **C4가 추적해서 검사선 통과 시 1회 집계**한다 (api-spec 4.2).
+- **입력 방식은 세 단계로 나눈다** (README "입력 방식").
+  1. 정확도 평가: `data/sim/`의 프레임 + 라벨을 평가 스크립트가 **C2·C3 함수를 직접 호출**해서 처리한다. 파이프라인은 거치지 않는다.
+     C1이 버린 프레임과 라벨의 짝이 끊기고, 대시보드 결과에는 윤곽선이 없기 때문이다.
+  2. 성능·집계: 시뮬레이터 화면 녹화(`data/videos/*_screen.mp4`)를 `tools/fake_camera.py --video`로 전체 파이프라인에 넣는다.
+  3. 시연: 폰으로 모니터를 촬영한다. 라벨과 좌표가 맞지 않으므로 정확도 채점에는 쓰지 않는다.
+  평가 코드에서 C2·C3 로직을 부르려면 HTTP 처리(`main.py`)와 로직 파일이 분리돼 있어야 한다. 로직을 `main.py`로 옮기지 않는다.
 
 ## 핵심 문서 (작업 전에 먼저 읽을 것)
 
@@ -62,15 +70,20 @@
 - **좌표는 모두 0~1로 정규화.** C2는 크롭하지 않고 종횡비를 유지해 리사이즈한다.
 - **SAM 2는 자동 분할을 쓰지 않고 박스 프롬프트(`SAM2ImagePredictor`)를 쓴다.** 박스는 C2가 OpenCV로 검출한다.
   `boxes`가 비어 있으면 C3 호출을 건너뛴다.
-- **판정**: `mask_score < MASK_SCORE_MIN`이면 `uncertain`, 아니면 원형도(`CIRCULARITY_THRESHOLD`), solidity(`SOLIDITY_THRESHOLD`),
-  원 채움률(`FILL_RATIO_THRESHOLD`), 오목 깊이(`CONCAVITY_THRESHOLD`) 중 **하나라도** 벗어나면 `defect`이고
-  벗어난 지표를 `defect_reasons`에, 추정 유형을 `defect_type`에 기록한다.
-  규칙의 기준은 api-spec 4.1.
+- **판정**: `mask_score < MASK_SCORE_MIN`이면 `uncertain`, 아니면 원형도(`CIRCULARITY_THRESHOLD`),
+  solidity(`SOLIDITY_THRESHOLD`), 원 채움률(`FILL_RATIO_THRESHOLD`) 중 **하나라도** 임계값 미만이면 `defect`이고
+  벗어난 지표를 `defect_reasons`에 기록한다. 규칙의 기준은 api-spec 4.1, 구현은 `c3-inference/app/judge.py`의 `thresholds()`.
+  지표를 추가할 때는 `measure()`와 `thresholds()`만 고치면 판정·`defect_reasons`에 자동으로 반영된다.
+- C3의 `app/sam2_segmenter.py`는 박민성 담당이다. 판정 로직을 바꿀 때 이 파일은 건드리지 않는다.
 - **`SEGMENTER=sam2|opencv`**: opencv 모드는 SAM 2 대신 OpenCV 윤곽선을 쓰는 기준선이다. 출력 형식과 판정 규칙은 같고,
   torch를 import하지 않아야 한다. 따라서 C3에서 torch/SAM 2 import는 sam2 모드 경로 안에서만 한다.
 - 모든 메시지에 `session_id`, `frame_id`, `timings`(epoch ms)를 담고, 각 단계는 받은 meta를 보존한 채 필드를 추가한다.
   C1은 늦게 도착한 오래된 `frame_id`를 표시하지 않는다.
 - **HTTPS 필수**: 브라우저는 보안 연결에서만 카메라(`getUserMedia`)를 허용한다. Nginx가 자체 서명 인증서로 TLS를 처리한다.
+- **과자 단위 집계는 C4가 한다** (`c4-visualizer/app/tracker.py`, api-spec 4.2). 과자를 추적하다가 검사선(`COUNT_LINE_X`)을
+  넘을 때 1회 집계하고, 판정은 온전히 보인 프레임들의 다수결로 정한다(동점이면 불량). 화면 끝에 걸친 과자(`truncated`)는 집계에서 뺀다.
+- **C4는 복제하지 않는다.** 추적 상태가 프로세스 메모리에 있다. Scale-out은 C3만 하고, compose에 C4 `--scale`을 넣지 않는다.
+  추적 갱신은 이벤트 루프에서 순서대로 하고(스레드풀 금지), 이미 처리한 `frame_id`보다 작은 프레임은 추적에 쓰지 않는다.
 
 ## 실행 환경 제약
 

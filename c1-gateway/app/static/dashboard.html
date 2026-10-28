@@ -38,7 +38,11 @@
       <table id="stats"></table>
     </div>
     <div class="card" style="margin-top:12px">
-      <h3>현재 프레임</h3>
+      <h3>누적 집계 (과자 단위, 검사선 통과 시)</h3>
+      <table id="tally"></table>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>현재 프레임 (프레임 단위)</h3>
       <table id="summary"></table>
       <div id="objects" style="font-size:13px;margin-top:6px"></div>
     </div>
@@ -55,8 +59,17 @@ function rows(pairs) {
   return pairs.map(([k, v]) => `<tr><td>${k}</td><td>${v ?? "-"}</td></tr>`).join("");
 }
 
+function onTracking(t) {
+  if (!t) return;
+  const c = t.totals;
+  const rate = c.total ? `${(c.defect / c.total * 100).toFixed(1)}%` : "-";
+  $("tally").innerHTML = rows([["검사 통과", c.total], ["정상", c.normal], ["불량", c.defect],
+                               ["판단불가", c.uncertain], ["불량률", rate]]);
+}
+
 function onResult(m) {
   $("frame").src = "data:image/jpeg;base64," + m.image_b64;
+  onTracking(m.tracking);
   const l = m.latency_ms || {};
   $("frame-info").textContent =
     `frame ${m.frame_id} · session ${m.session_id} · replica ${m.replica ?? "-"} · 전체 ${l.total ?? "-"} ms ` +
@@ -64,7 +77,7 @@ function onResult(m) {
   const s = m.summary || {};
   $("summary").innerHTML = rows([["전체", s.total], ["정상", s.normal], ["불량", s.defect], ["판단불가", s.uncertain]]);
   $("objects").innerHTML = (m.objects || []).map(o =>
-    `<div class="${o.verdict}">#${o.box_id} ${o.verdict} · C=${o.circularity?.toFixed(3)} · S=${o.solidity?.toFixed(3)}` +
+    `<div class="${o.verdict}">#${o.box_id} ${o.verdict} · C=${o.circularity?.toFixed(3)} · S=${o.solidity?.toFixed(3)} · F=${o.fill_ratio?.toFixed(3)}` +
     `${o.defect_reasons?.length ? " (" + o.defect_reasons.join(", ") + ")" : ""}</div>`).join("");
 }
 
