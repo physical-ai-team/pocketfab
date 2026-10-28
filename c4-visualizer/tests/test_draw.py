@@ -54,15 +54,20 @@ def test_윤곽선_색과_요약():
     assert img[200, 320][2] > img[200, 120][2] + 20
 
 
-def test_라벨_유형과_오목깊이():
+def test_라벨은_불량_유형과_판정을_가른_지표만():
     bite = obj(0, 0, 0, "defect", concavity=0.12, defect_reasons=["concavity"], defect_type="bite")
-    assert labels(bite) == ["#0 DEFECT bite", "depth 0.12"]
+    assert labels(bite) == ["bite", "D0.12"]
 
     cut = obj(1, 0, 0, "defect", fill_ratio=0.88, defect_reasons=["fill_ratio"], defect_type="cut")
-    assert labels(cut) == ["#1 DEFECT cut", "depth 0.02  fill 0.88"]
+    assert labels(cut) == ["cut", "F0.88"]
 
-    assert labels(obj(2, 0, 0, "normal")) == ["#2 NORMAL", "depth 0.02"]
-    assert labels(obj(3, 0, 0, "uncertain", mask_score=0.3)) == ["#3 UNCERTAIN", "mask 0.30"]
+    # 여러 지표가 벗어나면 오목 깊이 > 원 채움률 > 원형도 > solidity 순으로 하나만 쓴다
+    wedge = obj(2, 0, 0, "defect", circularity=0.6, concavity=0.8,
+                defect_reasons=["circularity", "solidity", "fill_ratio", "concavity"], defect_type="wedge")
+    assert labels(wedge) == ["wedge", "D0.80"]
+
+    assert labels(obj(3, 0, 0, "normal")) == []  # 정상은 윤곽선만
+    assert labels(obj(4, 0, 0, "uncertain", mask_score=0.3)) == ["?", "m0.30"]
 
 
 def test_화면끝_과자는_회색이고_라벨이_없다():
