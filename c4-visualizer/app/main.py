@@ -56,11 +56,13 @@ def log_tracking(m: dict):
         f.write(json.dumps(line, ensure_ascii=False) + "\n")
 
 
-def log_image(m: dict, jpeg: bytes):
-    """C4가 그린 결과 이미지를 <세션>/<frame_id>.jpg로 남긴다. 판정이 왜 틀렸는지 눈으로 볼 때 쓴다."""
+def log_image(m: dict, jpeg: bytes, original: bytes):
+    """<세션>/<frame_id>.jpg: C4가 그린 결과 (판정이 왜 틀렸는지 눈으로 볼 때)
+    <세션>/<frame_id>_orig.jpg: 폰이 보낸 원본 (C2·C3를 고친 뒤 실제 촬영 사진으로 다시 돌려 볼 때)"""
     folder = Path(TRACK_LOG_DIR) / m["session_id"]
     folder.mkdir(exist_ok=True)
     (folder / f"{m['frame_id']:05d}.jpg").write_bytes(jpeg)
+    (folder / f"{m['frame_id']:05d}_orig.jpg").write_bytes(original)
 
 
 @asynccontextmanager
@@ -91,9 +93,10 @@ async def render_endpoint(meta: str = Form(...), original: UploadFile = File(...
     m["tracking"] = trackers.update(m)
     if TRACK_LOG_DIR:
         log_tracking(m)  # 한 줄짜리 작은 쓰기라 이벤트 루프에서 바로 해도 된다 (추적과 같은 순서로 남기려는 것)
-    image, summary = await run_in_threadpool(render, await original.read(), m)
+    orig = await original.read()
+    image, summary = await run_in_threadpool(render, orig, m)
     if TRACK_LOG_DIR:
-        await run_in_threadpool(log_image, m, image)
+        await run_in_threadpool(log_image, m, image, orig)
     m["summary"] = summary
     m["timings"]["c4_end"] = now_ms()
 
