@@ -27,5 +27,5 @@ dependencies:
       - pytest
       - pytest-asyncio
       # C3 (SAM 2) 의존성은 용량이 커서 C3 개발을 시작할 때 추가한다.
-      #   CPU: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-      #   SAM 2: c3-inference/README 참고 (추후 작성)
+      #   CPU: pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
+      #   SAM 2: c3-inference/README "로컬 테스트 환경" 참고
