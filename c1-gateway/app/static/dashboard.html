@@ -64,7 +64,7 @@ function onResult(m) {
   const s = m.summary || {};
   $("summary").innerHTML = rows([["전체", s.total], ["정상", s.normal], ["불량", s.defect], ["판단불가", s.uncertain]]);
   $("objects").innerHTML = (m.objects || []).map(o =>
-    `<div class="${o.verdict}">#${o.box_id} ${o.verdict} · C=${o.circularity?.toFixed(3)} · S=${o.solidity?.toFixed(3)}` +
+    `<div class="${o.verdict}">#${o.box_id} ${o.verdict} · C=${o.circularity?.toFixed(3)} · S=${o.solidity?.toFixed(3)} · F=${o.fill_ratio?.toFixed(3)}` +
     `${o.defect_reasons?.length ? " (" + o.defect_reasons.join(", ") + ")" : ""}</div>`).join("");
 }
 

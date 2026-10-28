@@ -107,6 +107,7 @@ async def infer_endpoint(
         "device": DEVICE,
         "circularity_threshold": judge.CIRCULARITY_THRESHOLD,
         "solidity_threshold": judge.SOLIDITY_THRESHOLD,
+        "fill_ratio_threshold": judge.FILL_RATIO_THRESHOLD,
     }
     m["objects"] = objects
     m["timings"]["c3_end"] = now_ms()

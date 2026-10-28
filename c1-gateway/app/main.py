@@ -359,7 +359,7 @@ async def results(meta: str = Form(...), image: UploadFile = File(...)):
         "image_b64": base64.b64encode(jpeg).decode(),
         "summary": m.get("summary"),
         "objects": [
-            {k: o.get(k) for k in ("box_id", "circularity", "solidity", "verdict", "defect_reasons")}
+            {k: o.get(k) for k in ("box_id", "circularity", "solidity", "fill_ratio", "verdict", "defect_reasons")}
             for o in m.get("objects", [])
         ],
         "latency_ms": latency_ms(m["timings"]),
