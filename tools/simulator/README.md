@@ -4,7 +4,7 @@ PocketFab의 검사 대상(같은 크기 원형 초코칩 쿠키)을 만드는 �
 
 | 파일 | 내용 |
 |---|---|
-| `conveyor-cookie-sim.html` | 시뮬레이터. Chrome으로 열면 바로 동작합니다 |
+| `conveyor-cookie-sim.html` | 시뮬레이터. Chrome으로 열면 바로 동작합니다. PocketFab에서 **자동 캡처**(프레임 + 라벨 쌍을 ZIP으로)를 추가했습니다 |
 | `shape_metrics.py` | 불량 유형별 원형도·solidity 분포 측정 (`python tools/simulator/shape_metrics.py`) |
 
 - 사용법, 특히 **프레임(S)과 라벨(L) 저장 절차**: 루트 [README의 "시뮬레이터 사용법"](../../README.md#시뮬레이터-사용법)
