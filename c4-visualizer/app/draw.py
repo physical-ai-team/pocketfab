@@ -41,5 +41,28 @@ def render(jpeg: bytes, meta: dict) -> tuple[bytes, dict]:
                  f"S={o['solidity']:.2f} F={o['fill_ratio']:.2f}")
         put_text(img, label, (int(x1), max(int(y1) - 6, 60)), COLORS[o["verdict"]])
 
+    draw_tracking(img, meta)
     ok, out = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
     return out.tobytes(), summary
+
+
+def draw_tracking(img, meta: dict):
+    """검사선, 과자 단위 누적 집계, 추적 번호를 그린다 (app/tracker.py 결과)."""
+    tracking = meta.get("tracking")
+    if not tracking:
+        return
+    h, w = img.shape[:2]
+    line_x = int(tracking["count_line_x"] * w)
+    cv2.line(img, (line_x, 0), (line_x, h), (60, 60, 230), 1, cv2.LINE_AA)
+
+    t = tracking["totals"]
+    put_text(img, f"COUNTED {t['total']}  normal {t['normal']}  defect {t['defect']}  "
+                  f"uncertain {t['uncertain']}", (8, h - 12), (255, 255, 255))
+
+    for o in meta.get("objects", []):
+        x1, y2 = o["box"][0] * w, o["box"][3] * h
+        tag = "edge" if o.get("truncated") else f"T{o.get('track_id')}"
+        put_text(img, tag, (int(x1), min(int(y2) + 14, h - 30)), (200, 200, 200), 0.4)
+
+    for c in tracking["counted"]:  # 이번 프레임에 검사선을 넘은 과자
+        put_text(img, f"+1 T{c['track_id']} {c['verdict'].upper()}", (line_x + 6, 70), COLORS[c["verdict"]], 0.6)

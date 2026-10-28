@@ -58,7 +58,7 @@ SAM 2로 과자 마스크를 추출하고, OpenCV로 원형도를 계산해 정�
 | **C1 Gateway** | QR코드 접속, 스마트폰 카메라 페이지, 결과 대시보드, 프레임 유입 제어(백프레셔) |
 | **C2 Preprocessing** | 리사이즈, 노이즈 제거, 밝기 보정, OpenCV로 과자 후보 박스 검출 |
 | **C3 Inference** | 박스 프롬프트로 SAM 2 마스크 추출, 원형도·solidity 계산, 정상/불량 판정 |
-| **C4 Visualizer** | 판정 결과를 원본 프레임에 마킹해 C1로 전송 |
+| **C4 Visualizer** | 판정 결과를 원본 프레임에 마킹해 C1로 전송. 과자를 추적해 검사선 통과 시 1회 집계(다수결 판정). **복제하지 않음** |
 | **Nginx** | 외부 HTTPS 진입점(C1 프록시) + C3 복제본 로드밸런싱(`least_conn`) |
 
 자세한 데이터 형식은 [docs/api-spec.md](docs/api-spec.md)를 참고하세요.
@@ -203,7 +203,7 @@ Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -match 'Wi-Fi
 docker compose up -d --build --scale c3-inference=2   # C3를 2개로 복제
 docker compose ps                                     # 6개 컨테이너가 Up인지 확인
 docker compose logs -f c3-inference                   # 특정 서비스 로그 보기
-docker compose up -d --scale c3-inference=4           # 실행 중에 복제본 수 변경
+docker compose up -d --scale c3-inference=4           # 실행 중에 복제본 수 변경 (C3만! C4는 복제 금지)
 docker compose down                                   # 종료
 ```
 
@@ -407,6 +407,9 @@ data/
   지연이 쌓이지 않게 합니다. 실제 처리 fps는 성능 측정으로 확인합니다.
 - **CPU 한 대에서는 C3 복제(Scale-out)의 효과가 제한적입니다.** 복제본들이 같은 코어를 나눠 쓰기 때문입니다.
   자세한 내용은 [docs/performance-plan.md](docs/performance-plan.md)를 참고하세요.
-- 판정 지표는 **같은 크기의 원형 쿠키**(시뮬레이터)를 전제로 합니다. 현재 기본 임계값은 임시값이라 `bite`·`cut` 불량을 놓칩니다.
-  시뮬레이터 라벨로 다시 보정해야 합니다 ([대상 과자](#대상-과자)).
-- 한 과자가 여러 프레임에 반복해서 찍히므로, 지금 대시보드의 개수는 **프레임 단위**입니다. 과자 단위 집계 방식은 검토 중입니다.
+- 판정 지표는 **같은 크기의 원형 쿠키**(시뮬레이터)를 전제로 합니다. 현재 기본 임계값은 이상적 마스크로 정한 임시값입니다.
+  실제 마스크에서는 시뮬레이터 라벨로 다시 보정해야 하고, 결손이 작은 `bite`는 아직 잘 못 잡습니다 ([대상 과자](#대상-과자)).
+- 한 과자는 여러 프레임에 반복해서 찍힙니다. 대시보드의 **"누적 집계"가 과자 단위**(검사선 통과 시 1회, 다수결 판정)이고,
+  "현재 프레임"은 프레임 단위 참고값입니다. 과자 단위 집계는 C4가 추적 상태를 메모리에 들고 있으므로 **C4는 복제하지 않습니다**.
+- 집계는 처리된 프레임 사이에 과자가 **과자 간격의 약 80%보다 덜** 움직여야 정확합니다. 시뮬레이터 기본 속도에서는 처리 fps 1 이상이면 됩니다
+  ([api-spec 4.2](docs/api-spec.md)).
