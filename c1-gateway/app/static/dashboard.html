@@ -133,9 +133,10 @@ function onTracking(t) {
 function onCounted(m) {
   const defects = (m.tracking?.counted || []).filter(c => c.verdict === "defect");
   for (const c of defects) {
-    // 검사선을 넘은 그 프레임의 objects에서 같은 track_id를 찾아 불량 유형을 가져온다
+    // 불량 유형은 C4가 그 과자의 프레임별 판정을 모아 다수결로 정해 준다 (c.defect_type).
+    // 예전 C4는 이 값이 없으므로, 그때는 검사선을 넘은 그 프레임의 objects에서 같은 track_id를 찾는다
     const obj = (m.objects || []).find(o => o.track_id === c.track_id);
-    const type = obj?.defect_type || "unknown";
+    const type = c.defect_type || obj?.defect_type || "unknown";
     typeCounts[type] = (typeCounts[type] || 0) + 1;
     recent.unshift({ type, trackId: c.track_id, frameId: m.frame_id, votes: c.votes,
                      image: m.image_b64, time: new Date().toLocaleTimeString() });

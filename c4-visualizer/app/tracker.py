@@ -45,7 +45,17 @@ class Track:
     t: float  # 마지막으로 본 시각 (초)
     vx: float | None = None  # 가로 속도 (화면 폭/초). 두 번 이상 본 뒤에 생긴다
     votes: dict = field(default_factory=lambda: {"normal": 0, "defect": 0, "uncertain": 0})
+    types: dict = field(default_factory=dict)  # 불량 판정 때 나온 유형별 횟수 (예: {"bite": 2, "cut": 1})
     counted: bool = False
+
+    def vote(self, o: dict):
+        self.votes[o["verdict"]] += 1
+        if o["verdict"] == "defect" and o.get("defect_type"):
+            self.types[o["defect_type"]] = self.types.get(o["defect_type"], 0) + 1
+
+    def top_type(self) -> str | None:
+        """가장 많이 나온 불량 유형. 같으면 먼저 나온 것."""
+        return max(self.types, key=self.types.get) if self.types else None
 
     def predict_x(self, t: float) -> float:
         """시각 t에 있을 것으로 예상되는 x. 안 보이던 동안에도 계속 움직였다고 본다."""
@@ -116,14 +126,16 @@ class SessionTracker:
             if t > prev_t:
                 v = (tr.x - prev_x) / (t - prev_t)
                 tr.vx = v if tr.vx is None else 0.5 * tr.vx + 0.5 * v  # 흔들림을 줄이려고 이전 값과 섞는다
-            tr.votes[o["verdict"]] += 1
+            tr.vote(o)
             o["track_id"] = tr.id
             if not tr.counted and SIGN * prev_x < SIGN * COUNT_LINE_X <= SIGN * tr.x:
                 tr.counted = True
                 verdict = majority(tr.votes)
                 self.totals["total"] += 1
                 self.totals[verdict] += 1
-                counted_now.append({"track_id": tr.id, "verdict": verdict, "votes": dict(tr.votes)})
+                # 불량 유형도 다수결로 넘긴다. 검사선을 넘은 그 프레임의 판정만 보면 정상으로 나와 유형이 빌 수 있다
+                counted_now.append({"track_id": tr.id, "verdict": verdict, "votes": dict(tr.votes),
+                                    "defect_type": tr.top_type() if verdict == "defect" else None})
 
         # 3. 이어지지 않은 과자는 새 추적을 시작한다
         for i, o in enumerate(dets):
@@ -131,7 +143,7 @@ class SessionTracker:
                 continue
             cx, cy, w, h = center(o["box"])
             tr = Track(id=self.next_id, x=cx, y=cy, w=w, h=h, t=t)
-            tr.votes[o["verdict"]] += 1
+            tr.vote(o)
             self.next_id += 1
             self.tracks.append(tr)
             o["track_id"] = tr.id

@@ -100,6 +100,19 @@ def test_majority_vote_decides_verdict():
     assert st.totals["defect"] <= st.totals["total"] // 3 + 1
 
 
+def test_counted_defect_type_is_majority_even_if_last_frame_normal():
+    # 과자 하나가 검사선(0.34)을 지나간다: bite, bite, 그리고 넘는 순간의 프레임은 정상으로 판정됨
+    # → 다수결로 불량, 유형은 그동안 나온 bite (넘는 프레임만 보면 유형이 없어 대시보드에 "unknown"이 떴다)
+    st = SessionTracker()
+    frames = [(0.50, "defect", "bite"), (0.42, "defect", "bite"), (0.30, "normal", None)]
+    counted = []
+    for i, (cx, verdict, dtype) in enumerate(frames):
+        obj = {"box_id": 0, "box": [cx - 0.04, 0.4, cx + 0.04, 0.6], "verdict": verdict, "defect_type": dtype}
+        counted += st.update(i, i * 4.5, [obj])["counted"]
+    assert counted == [{"track_id": 1, "verdict": "defect", "votes": {"normal": 1, "defect": 2, "uncertain": 0},
+                        "defect_type": "bite"}]
+
+
 def test_tie_is_defect():
     assert tracker.majority({"normal": 2, "defect": 2, "uncertain": 0}) == "defect"
     assert tracker.majority({"normal": 0, "defect": 0, "uncertain": 3}) == "uncertain"
