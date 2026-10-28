@@ -87,17 +87,18 @@ def main():
     for strength in args.strength:
         for diameter in args.diameter:
             print(f"\n결손 크기 {strength:.0%}, 지름 {diameter}px  (표본 {args.samples}개, 개체 편차 amp 0.55~1.0)")
-            print(f"{'유형':6s} {'원형도':>13s} {'solidity':>13s} {'원 채움률':>13s} {'불량 판정률':>10s}")
+            print(f"{'유형':6s} {'원형도':>13s} {'solidity':>13s} {'원 채움률':>13s} {'오목 깊이':>13s} {'불량 판정률':>10s}")
             for typ in TYPES:
-                circ, solid, fill, defect = [], [], [], 0
+                circ, solid, fill, conc, defect = [], [], [], [], 0
                 for _ in range(args.samples):
                     contour = rasterize(make_radius(typ, strength, 0.55 + random.random() * 0.45), diameter)
                     m = measure(contour)
                     circ.append(m["circularity"])
                     solid.append(m["solidity"])
                     fill.append(m["fill_ratio"])
+                    conc.append(m["concavity"])
                     defect += judge(m, mask_score=None)[0] == "defect"
-                print(f"{typ:6s} {span(circ):>13s} {span(solid):>13s} {span(fill):>13s} "
+                print(f"{typ:6s} {span(circ):>13s} {span(solid):>13s} {span(fill):>13s} {span(conc):>13s} "
                       f"{defect / args.samples:>10.0%}")
 
 

@@ -68,15 +68,14 @@ def test_polygon_is_normalized():
     assert all(0 <= x <= 1 and 0 <= y <= 1 for x, y in poly)
 
 
-def test_cut_snack_is_defect_by_fill_ratio():
-    """직선으로 잘린 과자(cut)는 볼록해서 원형도·solidity로 못 잡고, 원 채움률로 잡는다."""
-    img = blank()
-    cv2.circle(img, (200, 150), 60, (200, 180, 140), -1)
-    img[:, 245:] = 40  # 오른쪽을 직선으로 잘라냄
-    obj = run(img)
-    assert obj["verdict"] == "defect", obj
-    assert "fill_ratio" in obj["defect_reasons"]
-    assert obj["defect_type"] == "cut"
+def test_cut_and_half_defect_types():
+    """볼록하게 잘린 과자: 조금 잘리면 cut, 반 가까이 없어지면 half."""
+    for cut_x, expected in ((245, "cut"), (205, "half")):
+        img = blank()
+        cv2.circle(img, (200, 150), 60, (200, 180, 140), -1)
+        img[:, cut_x:] = 40
+        obj = run(img)
+        assert obj["verdict"] == "defect" and obj["defect_type"] == expected, obj
 
 
 def test_bitten_snack_is_defect_by_concavity():
