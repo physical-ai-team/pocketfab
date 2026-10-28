@@ -16,11 +16,12 @@
 3. 박스 검출이 안정되면 `.env`에서 `SKIP_C3_IF_NO_BOXES=true`로 바꾼다 (과자 없는 프레임은 C3 생략)
 
 ## 혼자 확인하기
-서버 없이 함수만 시험하려면 `data/frames/`의 이미지로 이렇게 해 본다.
+서버 없이 함수만 시험하려면 시뮬레이터 자동 캡처로 만든 `data/sim/calib/`의 프레임으로 이렇게 해 본다
+(PNG도 `cv2.imdecode`로 그대로 읽힌다). 같은 번호의 `.json`에 있는 `annotations[].bbox`가 정답 박스이므로 결과와 비교할 수 있다.
 ```python
 from app.preprocess import preprocess, detect_boxes
-jpeg = open("../data/frames/normal/xxx.jpg", "rb").read()
-img, size, info = preprocess(jpeg, {"w": 640, "h": 480})
+frame = open("../data/sim/calib/0001.png", "rb").read()
+img, size, info = preprocess(frame, {"w": 1008, "h": 450})   # 크기는 같은 번호 JSON의 image.width/height
 print(size, info, detect_boxes(img, size))
 ```
 전체로 확인하려면 `docker compose up --build` 후 대시보드에서 C3가 그린 라벨이 과자 위에 뜨는지 본다.
